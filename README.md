@@ -14,16 +14,39 @@ Most uses of nx2pt will simply involve running the script `run_nx2pt` which take
 A very simple example of a `pipeline.yaml` file is given below:
 ```yaml
 nside: 1024
+# binning scheme for cross-spectra
+ell_min: 2
+delta_ell: 50
+# where to save namaster workspaces containg the mode coupling matrices
+workspace_dir: "workspaces"
 
+# define first tracer (some galaxy sample, for example)
 tracer1:
+  name: "Galaxy sample 1"
+  data_dir: "galaxies1"
+  map: "galaxy1_delta.fits"
+  mask: "galaxy1_mask.fits"
 
+# define second tracer (some other galaxy sample)
 tracer2:
+  name: "Galaxy sample 2"
+  data_dir: "galaxies2"
+  map: "galaxy2_delta.fits"
+  mask: "galaxy2_mask.fits"
 
 cross_spectra:
-  list: [tracer1, tracer2]
+  # calculate all auto- and cross-spectra
+  list:
+    - [tracer1, tracer2]
+    - [tracer1, tracer1]
+    - [tracer2, tracer2]
+  # calculate full covariance
+  covariance: True
+  # save everything to a .npz file
+  save_npz: "galaxy_3x2pt_spectra.npz"
 ```
 
-More pipeline examples are given in `examples`.
+It is very easy to setup significantly more complicated pipelines with arbitrary number of tracers (each possibly with tomographic bins and/or spin). More pipeline examples are given in `examples`.
 
 After specifying the tracers and various configuration options, all of the cross-spectra and covariances can be calculated by simply running:
 ```
