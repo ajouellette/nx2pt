@@ -36,7 +36,7 @@ def get_cov_workspace(wksp_dir, nmt_field1a, nmt_field2a, nmt_field1b=None, nmt_
     elif nmt_field1b is None or nmt_field2b is None:
         raise ValueError("Must provide either 2 or 4 fields")
 
-    # only need to hash based on masks
+    # only need to hash masks
     hash_key = joblib.hash([nmt_field1a.get_mask(), nmt_field2a.get_mask(), nmt_field1b.get_mask(), nmt_field2b.get_mask()])
     wksp_file = f"{wksp_dir}/cov/{hash_key}.fits"
 
