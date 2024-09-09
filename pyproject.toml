@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nx2pt"
+version = "0.0.1"
+authors = [
+    {name="Aaron Ouellette", email="aaronjo2@illinois.edu"},
+]
+description = "A framework for running general Nx2-point analyses"
+readme = "README.md"
+dependencies = [
+    "healpy",
+    "pymaster >= 2.2",
+    "sacc",
+    "joblib",
+    "pyyaml"
+]
