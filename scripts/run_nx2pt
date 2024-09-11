@@ -138,7 +138,7 @@ def main():
                 for j in range(len(tracer2)):
                     cl_key = (xspec[0]+f"_{i}", xspec[1]+f"_{j}")
                     print("Computing cross-spectrum", cl_key)
-                    cl, bpw = nx2pt.compute_cl(wksp_dir, tracer1[i]["nmt_field"], tracer2[j]["nmt_field"], ell_bins, return_bpw=True)
+                    cl, bpw = nx2pt.compute_cl(wksp_dir, tracer1[i]["nmt_field"], tracer2[j]["nmt_field"], nmt_bins, return_bpw=True)
                     cls[cl_key] = cl
                     bpws[cl_key] = bpw
 
@@ -162,7 +162,7 @@ def main():
                 nmt_field2b = tracers[tracer2][bin2]["nmt_field"]
 
                 cov = nx2pt.compute_gaussian_cov(wksp_dir, nmt_field1a, nmt_field2a,
-                                                nmt_field1b, nmt_field2b, ell_bins)
+                                                nmt_field1b, nmt_field2b, nmt_bins)
                 covs[cov_key] = cov
 
         # save all cross-spectra
