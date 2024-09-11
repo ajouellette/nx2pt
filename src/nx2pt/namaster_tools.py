@@ -1,4 +1,5 @@
 import os
+import numpy as np
 import healpy as hp
 import pymaster as nmt
 import joblib
@@ -60,6 +61,10 @@ def compute_cl(wksp_dir, nmt_field1, nmt_field2, nmt_bins, return_bpw=False):
     return cl
 
 
+def fsky(nmt_field1, nmt_field2):
+    return np.mean(nmt_field1.get_mask() * nmt_field2.get_mask())
+
+
 def compute_gaussian_cov(wksp_dir, nmt_field1a, nmt_field2a, nmt_field1b, nmt_field2b, nmt_bins):
     """Compute the Gaussian covariance between powerspectra A and B."""
     # get workspaces
@@ -70,14 +75,10 @@ def compute_gaussian_cov(wksp_dir, nmt_field1a, nmt_field2a, nmt_field1b, nmt_fi
     spins = [nmt_field1a.spin, nmt_field2a.spin, nmt_field1b.spin, nmt_field2b.spin]
 
     # iNKA approximation: get coupled cls divded by mean of product of masks
-    pcl1a1b = nmt.compute_coupled_cell(nmt_field1a, nmt_field1b) / np.mean(nmt_field1a.get_mask() *
-                                                                           nmt_field1b.get_mask())
-    pcl2a1b = nmt.compute_coupled_cell(nmt_field2a, nmt_field1b) / np.mean(nmt_field2a.get_mask() *
-                                                                           nmt_field1b.get_mask())
-    pcl1a2b = nmt.compute_coupled_cell(nmt_field1a, nmt_field2b) / np.mean(nmt_field1a.get_mask() *
-                                                                           nmt_field2b.get_mask())
-    pcl2a2b = nmt.compute_coupled_cell(nmt_field2a, nmt_field2b) / np.mean(nmt_field2a.get_mask() *
-                                                                           nmt_field2b.get_mask())
-    cov = nmt.gaussian_covariance(cov_wksp, *spins, pcl1a1b, pcl2a1b, pcl1a2b, pcl2a2b,
-                                  wksp_a, wksp_b)
+    pcl1a1b = nmt.compute_coupled_cell(nmt_field1a, nmt_field1b) / fsky(nmt_field1a, nmt_field1b)
+    pcl2a1b = nmt.compute_coupled_cell(nmt_field2a, nmt_field1b) / fsky(nmt_field2a, nmt_field1b)
+    pcl1a2b = nmt.compute_coupled_cell(nmt_field1a, nmt_field2b) / fsky(nmt_field1a, nmt_field2b)
+    pcl2a2b = nmt.compute_coupled_cell(nmt_field2a, nmt_field2b) / fsky(nmt_field2a, nmt_field2b)
+
+    cov = nmt.gaussian_covariance(cov_wksp, *spins, pcl1a1b, pcl1a2b, pcl2a1b, pcl2a2b, wksp_a, wksp_b)
     return cov
