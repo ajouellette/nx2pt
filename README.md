@@ -1,15 +1,17 @@
-# nx2pt-pipeline
+# nx2pt
 
 Nx2pt is designed to be a simple to use wrapper around the LSST DESC tools [NaMASTER](https://github.com/LSSTDESC/NaMaster) and [SACC](https://github.com/LSSTDESC/sacc) to calculate potentially large sets of cross-correlations and their covariance.
 
 ## Installation
 Installation should be as simple as
 ```
+git clone https://github.com/ajouellette/nx2pt
+cd nx2pt
 python -m pip install . [--user] [-e]
 ```
 
 ## Usage
-Most uses of nx2pt will simply involve running the script `run_nx2pt` which takes a YAML file that defines all the tracers of interest and specifies which cross-spectra and covariances to calculate.
+Most uses of Nx2pt will simply involve running the script `run_nx2pt` which takes a YAML file that defines all the tracers of interest and specifies which cross-spectra and covariances to calculate.
 
 A very simple example of a `pipeline.yaml` file is given below:
 ```yaml
