@@ -59,6 +59,7 @@ def get_tracer(config, key):
         nmt_field = nmt.NmtField(mask, maps, beam=beam)
         tracer = dict(name=bin_name, nmt_field=nmt_field)
         tracer_bins.append(tracer)
+        print(bin_name, f"spin {nmt_field.spin}")
 
     return tracer_bins
 
@@ -164,10 +165,10 @@ def main():
                 covs[cov_key] = cov
 
         # save all cross-spectra
-        if "save_npz" in config.keys():
+        if "save_npz" in config[xspec_key].keys():
             save_npz_file = config[xspec_key]["save_npz"].format(nside=config["nside"])
             print("Saving to", save_npz_file)
-            save_npz(ell_eff, cls, covs, bpws)
+            save_npz(save_npz_file, ell_eff, cls, covs, bpws)
 
         # create sacc file
         #if "save_sacc" in config.keys():
