@@ -1,5 +1,3 @@
-#!/bin/env python3
-
 import os
 import sys
 import yaml
@@ -174,7 +172,3 @@ def main():
         # create sacc file
         #if "save_sacc" in config.keys():
             #print("Creating sacc file")
-
-
-if __name__ == "__main__":
-    main()

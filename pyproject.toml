@@ -17,3 +17,6 @@ dependencies = [
     "joblib",
     "pyyaml"
 ]
+
+[project.scripts]
+run_nx2pt = "nx2pt.run_nx2pt:main"
