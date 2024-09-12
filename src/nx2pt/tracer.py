@@ -7,6 +7,9 @@ from astropy.table import Table
 
 @dataclass
 class Tracer:
+    """
+    Base class (not useable on its own) representing a field defined on the sky.
+    """
 
     name: str
     beam: np.array = field(repr=False, default=None, kw_only=True)
@@ -16,6 +19,23 @@ class Tracer:
 
 @dataclass
 class MapTracer(Tracer):
+    """
+    A class representing a map-based field defined on the sky.
+
+    Required arguments:
+    name: str - a name describing the tracer
+    maps: list of arrays - maps (1 for spin-0 fields or 2 for spin-2 fields) defining the field values on the sky
+    mask: array - sky mask
+
+    Optional arguments:
+    beam: array - instrument beam or smoothing that has been applied to the field
+    dndz: tuple of arrays - (z, dndz), redshift distribution of the tracer
+
+    Attributes:
+    nside: int - the healpix nside parameter for this tracer
+    spin: int - spin of this tracer
+    field: NmtField - namaster field object for this tracer
+    """
 
     nside: int = field(init=False)
     maps: list[np.array] = field(repr=False)
@@ -40,6 +60,9 @@ class MapTracer(Tracer):
 
 @dataclass
 class CatalogTracer(Tracer):
+    """
+    A class representing a catalog-based field defined on the sky.
+    """
 
     catalog: Table = field(repr=False)
 
