@@ -8,6 +8,7 @@ import joblib
 import sacc
 
 import nx2pt
+from nx2pt import MapTracer
 
 
 def get_ell_bins(config):
@@ -56,20 +57,11 @@ def get_tracer(config, key):
         mask = hp.read_map(mask_file)
         if use_mask_squared: mask = mask**2
 
-        nmt_field = nmt.NmtField(mask, maps, beam=beam)
-        tracer = dict(name=bin_name, nmt_field=nmt_field)
+        tracer = MapTracer(bin_name, maps, mask, beam=beam)
+        print(tracer)
         tracer_bins.append(tracer)
-        print(bin_name, f"spin {nmt_field.spin}")
 
     return tracer_bins
-
-
-def parse_tracer_bin(tracer_bin_key):
-    """Takes a string of the form tracer_name_{int} and returns tracer_name, int."""
-    key_split = tracer_bin_key.split('_')
-    tracer_name = '_'.join(key_split[:-1])
-    tracer_bin = int(key_split[-1])
-    return tracer_name, tracer_bin
 
 
 def save_sacc(config):
@@ -83,7 +75,7 @@ def save_npz(file_name, ell_eff, cls, covs, bpws):
                 {"cov_" + str(cov_key): covs[cov_key] for cov_key in covs.keys()} | \
                 {"bpw_" + str(cl_key): bpws[cl_key] for cl_key in cls.keys()} | \
                 {"ell_eff": ell_eff}
-    np.savez(save_npz_file, **save_dict)
+    np.savez(file_name, **save_dict)
 
 
 def main():
@@ -122,47 +114,7 @@ def main():
         if "interbin_cov" in config[xspec_key].keys():
             calc_interbin_cov = config[xspec_key]["interbin_cov"]
 
-        cls = dict()
-        bpws = dict()
-        # compute each cross-spectrum in the set
-        for xspec in xspec_list:
-            if xspec[0] not in tracer_keys or xspec[1] not in tracer_keys:
-                raise ValueError(f"Undefined tracer in x-spectrum {xspec}")
-
-            tracer1 = tracers[xspec[0]]
-            tracer2 = tracers[xspec[1]]
-
-            # loop over all tracer bins:
-            for i in range(len(tracer1)):
-                for j in range(len(tracer2)):
-                    cl_key = (xspec[0]+f"_{i}", xspec[1]+f"_{j}")
-                    print("Computing cross-spectrum", cl_key)
-                    cl, bpw = nx2pt.compute_cl(wksp_dir, tracer1[i]["nmt_field"], tracer2[j]["nmt_field"], nmt_bins, return_bpw=True)
-                    cls[cl_key] = cl
-                    bpws[cl_key] = bpw
-
-        # compute covariance for all pairs of cross-spectra in set
-        covs = dict()
-        cl_keys = list(cls.keys())
-        # double loop over cl_keys
-        for i in range(len(cl_keys)):
-            cl_key1 = cl_keys[i]
-            tracer1, bin1 = parse_tracer_bin(cl_key1[0])
-            tracer2, bin2 = parse_tracer_bin(cl_key1[1])
-            nmt_field1a = tracers[tracer1][bin1]["nmt_field"]
-            nmt_field2a = tracers[tracer2][bin2]["nmt_field"]
-            for j in range(i, len(cl_keys)):
-                cl_key2 = cl_keys[j]
-                cov_key = (cl_key1[0], cl_key1[1], cl_key2[0], cl_key2[1])
-                print("Computing covariance", cov_key)
-                tracer1, bin1 = parse_tracer_bin(cl_key2[0])
-                tracer2, bin2 = parse_tracer_bin(cl_key2[1])
-                nmt_field1b = tracers[tracer1][bin1]["nmt_field"]
-                nmt_field2b = tracers[tracer2][bin2]["nmt_field"]
-
-                cov = nx2pt.compute_gaussian_cov(wksp_dir, nmt_field1a, nmt_field2a,
-                                                nmt_field1b, nmt_field2b, nmt_bins)
-                covs[cov_key] = cov
+        cls, bpws, covs = nx2pt.compute_cls_cov(tracers, xspec_list, nmt_bins, compute_cov=calc_cov, compute_interbin_cov=calc_interbin_cov)
 
         # save all cross-spectra
         if "save_npz" in config[xspec_key].keys():
