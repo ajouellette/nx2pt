@@ -10,13 +10,25 @@ authors = [
 ]
 description = "A framework for running general Nx2-point analyses"
 readme = "README.md"
+license = "LICENSE"
 dependencies = [
     "healpy",
     "pymaster >= 2.2",
     "sacc",
     "joblib",
-    "pyyaml"
+    "pyyaml",
+    "astropy"
+]
+requires-python = ">=3.10"
+classifiers=[
+    'Development Status :: 3 - Alpha',
+	'License :: OSI Approved :: MIT License',
+	'Programming Language :: Python :: 3',
 ]
 
 [project.scripts]
 run_nx2pt = "nx2pt.run_nx2pt:main"
+
+[project.urls]
+Repository = "https://github.com/ajouellette/nx2pt.git"
+Issues = "https://github.com/ajouellette/nx2pt/issues"
