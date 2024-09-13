@@ -5,28 +5,35 @@ import pymaster as nmt
 import joblib
 
 
-def get_workspace(wksp_dir, nmt_field1, nmt_field2, nmt_bins):
+def get_workspace(nmt_field1, nmt_field2, nmt_bins, wksp_cache=None):
     """Get the NmtWorkspace for given fields and bins (with caching)."""
-    # only need to hash based on masks
-    hash_key = joblib.hash([nmt_field1.get_mask(), nmt_field2.get_mask()])
-    wksp_file = f"{wksp_dir}/cl/{hash_key}.fits"
+
+    if wksp_cache is None:
+        wksp = nmt.NmtWorkspace.from_fields(nmt_field1, nmt_field2, nmt_bins)
+        return wksp
+
+    # only need to hash based on masks and spins
+    hash_key = joblib.hash([nmt_field1.get_mask(), nmt_field1.spin, nmt_field2.get_mask(), nmt_field2.spin])
+    wksp_file = f"{wksp_cache}/cl/{hash_key}.fits"
 
     try:
         # load from existing file
         wksp = nmt.NmtWorkspace.from_file(wksp_file)
+        wksp.check_unbinned()
+        print("Using cached workspace")
         # update bins and beams after loading
         wksp.update_beams(nmt_field1.beam, nmt_field2.beam)
         wksp.update_bins(nmt_bins)
     except RuntimeError:
         # compute and save to file
         wksp = nmt.NmtWorkspace.from_fields(nmt_field1, nmt_field2, nmt_bins)
-        os.makedirs(f"{wksp_dir}/cl", exist_ok=True)
+        os.makedirs(f"{wksp_cache}/cl", exist_ok=True)
         wksp.write_to(wksp_file)
 
     return wksp
 
 
-def get_cov_workspace(wksp_dir, nmt_field1a, nmt_field2a, nmt_field1b=None, nmt_field2b=None):
+def get_cov_workspace(nmt_field1a, nmt_field2a, nmt_field1b=None, nmt_field2b=None, wksp_cache=None):
     """
     Get the NmtCovarianceWorkspace object needed to calculate the covariance between the
     cross-spectra (field1a, field2a) and (field1b, field2b).
@@ -37,15 +44,21 @@ def get_cov_workspace(wksp_dir, nmt_field1a, nmt_field2a, nmt_field1b=None, nmt_
     elif nmt_field1b is None or nmt_field2b is None:
         raise ValueError("Must provide either 2 or 4 fields")
 
-    # only need to hash masks
-    hash_key = joblib.hash([nmt_field1a.get_mask(), nmt_field2a.get_mask(), nmt_field1b.get_mask(), nmt_field2b.get_mask()])
-    wksp_file = f"{wksp_dir}/cov/{hash_key}.fits"
+    if wksp_cache is None:
+        wksp = nmt.NmtCovarianceWorkspace.from_fields(nmt_field1a, nmt_field2a, nmt_field1b, nmt_field2b)
+        return wksp
+
+    # hash masks and spins
+    hash_key = joblib.hash([nmt_field1a.get_mask(), nmt_field1a.spin, nmt_field2a.get_mask(), nmt_field2a.spin,
+                            nmt_field1b.get_mask(), nmt_field1b.spin, nmt_field2b.get_mask(), nmt_field2b.spin])
+    wksp_file = f"{wksp_cache}/cov/{hash_key}.fits"
 
     try:
         wksp = nmt.NmtCovarianceWorkspace.from_file(wksp_file)
+        print("Using cached workspace")
     except RuntimeError:
         wksp = nmt.NmtCovarianceWorkspace.from_fields(nmt_field1a, nmt_field2a, nmt_field1b, nmt_field2b)
-        os.makedirs(f"{wksp_dir}/cov", exist_ok=True)
+        os.makedirs(f"{wksp_cache}/cov", exist_ok=True)
         wksp.write_to(wksp_file)
 
     return wksp
@@ -108,7 +121,7 @@ def parse_cl_key(cl_key):
     return list(map(parse_tracer_bin, tracer_bin_keys))
 
 
-def compute_cls_cov(tracers, xspectra_list, bins, compute_cov=True, compute_interbin_cov=True):
+def compute_cls_cov(tracers, xspectra_list, bins, compute_cov=True, compute_interbin_cov=True, wksp_cache=None):
     """Calculate all cross-spectra and covariances from a list of tracers."""
     cls = dict()
     wksps = dict()
@@ -123,7 +136,7 @@ def compute_cls_cov(tracers, xspectra_list, bins, compute_cov=True, compute_inte
             for j in range(i, len(tracer2)):
                 cl_key = f"{tracer1_key}_{i}, {tracer2_key}_{j}"
                 print("computing cross-spectrum", cl_key)
-                wksp = nmt.NmtWorkspace.from_fields(tracer1[i].field, tracer2[j].field, bins)
+                wksp = get_workspace(tracer1[i].field, tracer2[j].field, bins, wksp_cache=wksp_cache)
                 pcl = nmt.compute_coupled_cell(tracer1[i].field, tracer2[j].field)
                 cl = wksp.decouple_cell(pcl)
                 # save quantities
@@ -157,7 +170,7 @@ def compute_cls_cov(tracers, xspectra_list, bins, compute_cov=True, compute_inte
 
             cov_key = f"{cl_key_a}, {cl_key_b}"
             print("computing covariance", cov_key)
-            cov_wksp = nmt.NmtCovarianceWorkspace.from_fields(field_a1, field_a2, field_b1, field_b2)
+            cov_wksp = get_cov_workspace(field_a1, field_a2, field_b1, field_b2, wksp_cache=wksp_cache)
             wksp_a = wksps[cl_key_a]
             wksp_b = wksps[cl_key_b]
             spins = [field_a1.spin, field_a2.spin, field_b1.spin, field_b2.spin]
