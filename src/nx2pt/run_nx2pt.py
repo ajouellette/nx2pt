@@ -1,3 +1,4 @@
+import argparse
 import os
 import sys
 import yaml
@@ -7,8 +8,8 @@ import pymaster as nmt
 import joblib
 import sacc
 
-import nx2pt
-from nx2pt import MapTracer
+from .tracer import MapTracer
+from .namaster_tools import parse_cl_key, parse_tracer_bin, compute_cls_cov
 
 
 def get_ell_bins(config):
@@ -50,11 +51,11 @@ def get_tracer(config, key):
         else:
             beam = np.ones(3*nside)
 
-        maps = np.atleast_2d(hp.read_map(map_file, field=None))
+        maps = np.atleast_2d(hp.read_map(map_file, field=None)).astype(float)
         if correct_qu_sign and len(maps) == 2:
             maps = np.array([-maps[0], maps[1]])
 
-        mask = hp.read_map(mask_file)
+        mask = hp.read_map(mask_file).astype(float)
         if use_mask_squared: mask = mask**2
 
         tracer = MapTracer(bin_name, maps, mask, beam=beam)
@@ -64,8 +65,34 @@ def get_tracer(config, key):
     return tracer_bins
 
 
-def save_sacc(config):
-    pass
+def save_sacc(file_name, tracers, ell_eff, cls, covs, bpws, ignore_b_modes=True, metadata=None):
+    s = sacc.Sacc()
+    # metadata
+    s.metadata["creation"] = datetime.date.today().isoformat()
+    if metadata is not None:
+        for key in metadata:
+            s.metadata[key] = metadata[key]
+    # tracers (currently only save as misc tracers)
+    for tracer_key in tracers.keys():
+        for i in range(len(tracers[tracer_key])):
+            sacc_name = tracer_key.rstrip("tracer_") + f"_{i}"
+            s.add_tracer("Misc", sacc_name)
+    # data
+    for cl_key in cls.keys():
+        (tracer1, bin1), (tracer2, bin2) = parse_cl_key(cl_key)
+        sacc_name1 = tracer1.rstrip("tracer_") + f"_{bin1}"
+        sacc_name2 = tracer2.rstrip("tracer_") + f"_{bin2}"
+        bpw = bpws[cl_key]
+        # possible spin combinations
+        if tracers[tracer1][bin1].spin == 0 and tracers[tracer2][bin2].spin == 0:
+            s.add_ell_cl("cl_00", sacc_name1, sacc_name2, ell_eff, cls[cl_key][0])
+        elif tracers[tracer1][bin1].spin == 2 and tracers[tracer2][bin2].spin == 0:
+            s.add_ell_cl("cl_e0", sacc_name1, sacc_name2, ell_eff, cls[cl_key][0])
+
+    # covariance
+
+    # write
+
 
 
 def save_npz(file_name, ell_eff, cls, covs, bpws):
@@ -79,7 +106,13 @@ def save_npz(file_name, ell_eff, cls, covs, bpws):
 
 
 def main():
-    with open(sys.argv[1]) as f:
+    parser = argparse.ArgumentParser(description="Run a Nx2-point analysis pipeline")
+    parser.add_argument("config_file", help="YAML file specifying pipeline to run")
+    parser.add_argument("--no-cache", action="store_true", help="Don't use the workspace cache")
+    args = parser.parse_args()
+    print(args)
+
+    with open(args.config_file) as f:
         config = yaml.full_load(f)
 
     print(config)
@@ -101,7 +134,10 @@ def main():
     nmt_bins = nmt.NmtBin.from_edges(ell_bins[:-1], ell_bins[1:])
     ell_eff = nmt_bins.get_effective_ells()
     print(f"Will calculate {len(ell_eff)} bandpowers between ell = {ell_bins[0]} and ell = {ell_bins[-1]}")
-    wksp_dir = config["workspace_dir"]
+    if args.no_cache:
+        wksp_dir = None
+    else:
+        wksp_dir = config["workspace_dir"]
 
     for xspec_key in xspec_keys:
         xspec_list = config[xspec_key]["list"]
@@ -114,7 +150,9 @@ def main():
         if "interbin_cov" in config[xspec_key].keys():
             calc_interbin_cov = config[xspec_key]["interbin_cov"]
 
-        cls, bpws, covs = nx2pt.compute_cls_cov(tracers, xspec_list, nmt_bins, compute_cov=calc_cov, compute_interbin_cov=calc_interbin_cov)
+        # calculate everything
+        cls, bpws, covs = compute_cls_cov(tracers, xspec_list, nmt_bins, compute_cov=calc_cov,
+                                          compute_interbin_cov=calc_interbin_cov, wksp_cache=wksp_dir)
 
         # save all cross-spectra
         if "save_npz" in config[xspec_key].keys():
