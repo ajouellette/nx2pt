@@ -14,6 +14,7 @@ class Tracer:
     beam: np.array = field(repr=False, default=None, kw_only=True)
     dndz: tuple[np.array, np.array] = field(repr=False, default=None, kw_only=True)
     spin: int = field(init=False)
+    is_cat_field: bool = field(init=False, repr=False)  # easy way to test if field is constructed from a catalog instead of a map
 
 
 @dataclass
@@ -41,6 +42,7 @@ class MapTracer(Tracer):
     mask: np.array = field(repr=False)
 
     def __post_init__(self):
+        self.is_cat_field = False
         for m in self.maps:
             assert len(m) == len(self.mask), "Maps and masks must all be the same size"
         self.nside = hp.npix2nside(len(self.mask))
@@ -65,23 +67,38 @@ class CatalogTracer(Tracer):
 
     pos: np.array = field(repr=False)
     weights: np.array = field(repr=False)
-    fields: list[np.array] = field(repr=False)
     lmax: int
-    field_is_weighted: bool = field(repr=False, default=False, kw_only=True)
     lonlat: bool = field(repr=False, default=True, kw_only=True)
 
+    # only for NmtFieldCatalog:
+    fields: list[np.array] = field(repr=False, default=None, kw_only=True)
+    field_is_weighted: bool = field(repr=False, default=False, kw_only=True)
+
+    # only for NmtFieldCatalogClustering:
+    pos_rand: np.array = field(repr=False, default=None, kw_only=True)
+    weights_rand: np.array = field(repr=False, default=None, kw_only=True)
+
+
     def __post_init__(self):
-        assert len(pos) == 2, "angular positions should have shape (2, N)"
-        if len(self.fields) == 1:
-            self.spin = 0
-        elif len(self.fields) == 2:
-            self.spin = 2
+        self.is_cat_field = True
+        if fields is None and pos_rand is None:
+            raise ValueError("Must provide either field values or a randoms catalog")
+
+        if fields is not None:
+            # create a NmtFieldCatalog object
+            if len(self.fields) == 1:
+                self.spin = 0
+            elif len(self.fields) == 2:
+                self.spin = 2
+            else:
+                raise ValueError("Must provide either 1 or 2 fields")
+            if self.beam is None:
+                self.beam = np.ones(self.lmax+1)
+            assert len(self.beam) >= self.lmax+1, "beam is incorrect size for given lmax"
+            # namaster field
+            self.field = nmt.NmtFieldCatalog(self.pos, self.weights, self.fields, self.lmax, spin=self.spin, beam=self.beam,
+                                             field_is_weighted=self.field_is_weighted, lonlat=self.lonlat)
         else:
-            raise ValueError("Only spin-0 or spin-2 supported")
-        assert len(weights) == len(pos[0]), "mismatch between shapes of weights and positions arrays"
-        assert len(fields[0]) == len(pos[0]), "mismatch between shapes of fields and positions arrays"
-        if self.beam is None:
-            self.beam = np.ones(self.lmax+1)
-        assert len(self.beam) >= self.lmax+1, "beam is incorrect size for given lmax"
-        # namaster field
-        self.field = nmt.NmtFieldCatalog(pos, weights, fields, lmax, spin=self.spin, beam=self.beam, field_is_weighted=self.field_is_weighted, lonlat=self.lonlat)
+            # create a NmtFieldCatalogClustering object
+            self.spin = 0
+            self.field = nmt.NmtFieldCatalogClustering(self.pos, self.weights, self.pos_rand, self.weights_rand, self.lmax, lonlat=self.lonlat)
