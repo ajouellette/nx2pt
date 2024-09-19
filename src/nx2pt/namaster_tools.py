@@ -12,8 +12,8 @@ def get_workspace(nmt_field1, nmt_field2, nmt_bins, wksp_cache=None):
         wksp = nmt.NmtWorkspace.from_fields(nmt_field1, nmt_field2, nmt_bins)
         return wksp
 
-    # only need to hash based on masks and spins
-    hash_key = joblib.hash([nmt_field1.get_mask(), nmt_field1.spin, nmt_field2.get_mask(), nmt_field2.spin])
+    # hash on mask alms (to support catalog fields) and spins
+    hash_key = joblib.hash([nmt_field1.get_mask_alms(), nmt_field1.spin, nmt_field2.get_mask_alms(), nmt_field2.spin])
     wksp_file = f"{wksp_cache}/cl/{hash_key}.fits"
 
     try:
@@ -156,6 +156,11 @@ def compute_cls_cov(tracers, xspectra_list, bins, compute_cov=True, compute_inte
         field_a1 = tracers[tracer_a1_key][bin_a1].field
         field_a2 = tracers[tracer_a2_key][bin_a2].field
 
+        # skip covariances that involve a catalog field
+        if tracers[tracer_a1_key].is_cat_field or tracers[tracer_a2_key].is_cat_field:
+            print("Skipping covariances involving catalog field (not implemented yet)")
+            continue
+
         for j in range(i, len(cl_keys)):
             cl_key_b = cl_keys[j]
 
@@ -167,6 +172,11 @@ def compute_cls_cov(tracers, xspectra_list, bins, compute_cov=True, compute_inte
             (tracer_b1_key, bin_b1), (tracer_b2_key, bin_b2) = parse_cl_key(cl_key_b)
             field_b1 = tracers[tracer_b1_key][bin_b1].field
             field_b2 = tracers[tracer_b2_key][bin_b2].field
+
+            # skip covariances that involve a catalog field
+            if tracers[tracer_b1_key].is_cat_field or tracers[tracer_b2_key].is_cat_field:
+                print("Skipping covariances involving catalog field (not implemented yet)")
+                continue
 
             cov_key = f"{cl_key_a}, {cl_key_b}"
             print("computing covariance", cov_key)
