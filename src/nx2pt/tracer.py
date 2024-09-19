@@ -2,7 +2,6 @@ from dataclasses import dataclass, field
 import numpy as np
 import healpy as hp
 import pymaster as nmt
-from astropy.table import Table
 
 
 @dataclass
@@ -64,7 +63,25 @@ class CatalogTracer(Tracer):
     A class representing a catalog-based field defined on the sky.
     """
 
-    catalog: Table = field(repr=False)
+    pos: np.array = field(repr=False)
+    weights: np.array = field(repr=False)
+    fields: list[np.array] = field(repr=False)
+    lmax: int
+    field_is_weighted: bool = field(repr=False, default=False, kw_only=True)
+    lonlat: bool = field(repr=False, default=True, kw_only=True)
 
     def __post_init__(self):
-        pass
+        assert len(pos) == 2, "angular positions should have shape (2, N)"
+        if len(self.fields) == 1:
+            self.spin = 0
+        elif len(self.fields) == 2:
+            self.spin = 2
+        else:
+            raise ValueError("Only spin-0 or spin-2 supported")
+        assert len(weights) == len(pos[0]), "mismatch between shapes of weights and positions arrays"
+        assert len(fields[0]) == len(pos[0]), "mismatch between shapes of fields and positions arrays"
+        if self.beam is None:
+            self.beam = np.ones(self.lmax+1)
+        assert len(self.beam) >= self.lmax+1, "beam is incorrect size for given lmax"
+        # namaster field
+        self.field = nmt.NmtFieldCatalog(pos, weights, fields, lmax, spin=self.spin, beam=self.beam, field_is_weighted=self.field_is_weighted, lonlat=self.lonlat)
