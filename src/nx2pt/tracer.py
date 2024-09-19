@@ -62,7 +62,25 @@ class MapTracer(Tracer):
 @dataclass
 class CatalogTracer(Tracer):
     """
-    A class representing a catalog-based field defined on the sky.
+    A class representing a either a field sampled at discrete points on the sky or
+      a field representing the clustering of discrete points on the sky.
+
+    Required arguments:
+    name: str
+    pos: np.array
+    weights: np.array
+    lmax: int
+
+    Required arguments for a sampled field:
+    fields: np.array
+
+    Required arguments for a clustering field:
+    pos_rand: np.array
+    weights_rand: np.array
+
+    Optional arguments:
+    lonlat: bool
+    field_is_weighted: bool
     """
 
     pos: np.array = field(repr=False)
@@ -81,10 +99,10 @@ class CatalogTracer(Tracer):
 
     def __post_init__(self):
         self.is_cat_field = True
-        if fields is None and pos_rand is None:
+        if self.fields is None and self.pos_rand is None:
             raise ValueError("Must provide either field values or a randoms catalog")
 
-        if fields is not None:
+        if self.fields is not None:
             # create a NmtFieldCatalog object
             if len(self.fields) == 1:
                 self.spin = 0
