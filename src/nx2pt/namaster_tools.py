@@ -4,6 +4,8 @@ import healpy as hp
 import pymaster as nmt
 import joblib
 
+from .utils import parse_tracer_bin, parse_cl_key
+
 
 def get_workspace(nmt_field1, nmt_field2, nmt_bins, wksp_cache=None):
     """Get the NmtWorkspace for given fields and bins (with caching)."""
@@ -13,7 +15,8 @@ def get_workspace(nmt_field1, nmt_field2, nmt_bins, wksp_cache=None):
         return wksp
 
     # hash on mask alms (to support catalog fields) and spins
-    hash_key = joblib.hash([nmt_field1.get_mask_alms(), nmt_field1.spin, nmt_field2.get_mask_alms(), nmt_field2.spin])
+    hash_key = joblib.hash([nmt_field1.get_mask_alms(), nmt_field1.spin,
+                            nmt_field2.get_mask_alms(), nmt_field2.spin])
     wksp_file = f"{wksp_cache}/cl/{hash_key}.fits"
 
     try:
@@ -45,19 +48,23 @@ def get_cov_workspace(nmt_field1a, nmt_field2a, nmt_field1b=None, nmt_field2b=No
         raise ValueError("Must provide either 2 or 4 fields")
 
     if wksp_cache is None:
-        wksp = nmt.NmtCovarianceWorkspace.from_fields(nmt_field1a, nmt_field2a, nmt_field1b, nmt_field2b)
+        wksp = nmt.NmtCovarianceWorkspace.from_fields(nmt_field1a, nmt_field2a,
+                                                      nmt_field1b, nmt_field2b)
         return wksp
 
     # hash masks and spins
-    hash_key = joblib.hash([nmt_field1a.get_mask(), nmt_field1a.spin, nmt_field2a.get_mask(), nmt_field2a.spin,
-                            nmt_field1b.get_mask(), nmt_field1b.spin, nmt_field2b.get_mask(), nmt_field2b.spin])
+    hash_key = joblib.hash([nmt_field1a.get_mask(), nmt_field1a.spin,
+                            nmt_field2a.get_mask(), nmt_field2a.spin,
+                            nmt_field1b.get_mask(), nmt_field1b.spin,
+                            nmt_field2b.get_mask(), nmt_field2b.spin])
     wksp_file = f"{wksp_cache}/cov/{hash_key}.fits"
 
     try:
         wksp = nmt.NmtCovarianceWorkspace.from_file(wksp_file)
         print("Using cached workspace")
     except RuntimeError:
-        wksp = nmt.NmtCovarianceWorkspace.from_fields(nmt_field1a, nmt_field2a, nmt_field1b, nmt_field2b)
+        wksp = nmt.NmtCovarianceWorkspace.from_fields(nmt_field1a, nmt_field2a,
+                                                      nmt_field1b, nmt_field2b)
         os.makedirs(f"{wksp_cache}/cov", exist_ok=True)
         wksp.write_to(wksp_file)
 
@@ -103,22 +110,10 @@ def compute_gaussian_cov(wksp_dir, nmt_field1a, nmt_field2a, nmt_field1b, nmt_fi
     if np.isnan(pcl2a1b).any(): print("pcl2a1b has nans")
     if np.isnan(pcl2a2b).any(): print("pcl2a2b has nans")
 
-    cov = nmt.gaussian_covariance(cov_wksp, *spins, pcl1a1b, pcl1a2b, pcl2a1b, pcl2a2b, wksp_a, wksp_b)
+    cov = nmt.gaussian_covariance(cov_wksp, *spins, pcl1a1b, pcl1a2b, pcl2a1b, pcl2a2b,
+                                  wksp_a, wksp_b)
     if np.isnan(cov).any(): print("cov has nans")
     return cov
-
-
-def parse_tracer_bin(tracer_bin_key):
-    """Takes a string of the form tracer_name_{int} and returns tracer_name, int."""
-    key_split = tracer_bin_key.split('_')
-    tracer_name = '_'.join(key_split[:-1])
-    tracer_bin = int(key_split[-1])
-    return tracer_name, tracer_bin
-
-
-def parse_cl_key(cl_key):
-    tracer_bin_keys = cl_key.split(', ')
-    return list(map(parse_tracer_bin, tracer_bin_keys))
 
 
 def compute_cls_cov(tracers, xspectra_list, bins, compute_cov=True, compute_interbin_cov=True, wksp_cache=None):

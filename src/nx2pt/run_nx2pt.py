@@ -10,7 +10,8 @@ import sacc
 from astropy.table import Table
 
 from .tracer import MapTracer, CatalogTracer
-from .namaster_tools import parse_cl_key, parse_tracer_bin, compute_cls_cov
+from .namaster_tools import compute_cls_cov
+from .utils import get_ul_key, parse_cl_key, parse_tracer_bin
 
 
 def get_ell_bins(config):
@@ -20,16 +21,6 @@ def get_ell_bins(config):
     dl = config["delta_ell"]
     ell_bins = np.linspace(ell_min, 3*nside, int((3*nside - ell_min) / dl) + 1, dtype=int)
     return ell_bins
-
-
-def get_ul_key(dict_like, key):
-    """Get a value using a case-insensitive key."""
-    key_list = list(dict_like.keys())
-    key_list_lower = [k.lower() for k in key_list]
-    if key.lower() not in key_list_lower:
-        raise KeyError(f"could not find {key} in {dict_like}")
-    ind = key_list_lower.index(key.lower())
-    return dict_like[key_list[ind]]
 
 
 def get_tracer(config, key):
