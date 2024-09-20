@@ -157,7 +157,7 @@ def compute_cls_cov(tracers, xspectra_list, bins, compute_cov=True, compute_inte
         field_a2 = tracers[tracer_a2_key][bin_a2].field
 
         # skip covariances that involve a catalog field
-        if tracers[tracer_a1_key].is_cat_field or tracers[tracer_a2_key].is_cat_field:
+        if tracers[tracer_a1_key][bin_a1].is_cat_field or tracers[tracer_a2_key][bin_a2].is_cat_field:
             print("Skipping covariances involving catalog field (not implemented yet)")
             continue
 
@@ -174,7 +174,7 @@ def compute_cls_cov(tracers, xspectra_list, bins, compute_cov=True, compute_inte
             field_b2 = tracers[tracer_b2_key][bin_b2].field
 
             # skip covariances that involve a catalog field
-            if tracers[tracer_b1_key].is_cat_field or tracers[tracer_b2_key].is_cat_field:
+            if tracers[tracer_b1_key][bin_b1].is_cat_field or tracers[tracer_b2_key][bin_b2].is_cat_field:
                 print("Skipping covariances involving catalog field (not implemented yet)")
                 continue
 
