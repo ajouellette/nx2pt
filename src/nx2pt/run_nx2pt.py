@@ -7,8 +7,9 @@ import healpy as hp
 import pymaster as nmt
 import joblib
 import sacc
+from astropy.table import Table
 
-from .tracer import MapTracer
+from .tracer import MapTracer, CatalogTracer
 from .namaster_tools import parse_cl_key, parse_tracer_bin, compute_cls_cov
 
 
@@ -21,11 +22,27 @@ def get_ell_bins(config):
     return ell_bins
 
 
+def get_ul_key(dict_like, key):
+    """Get a value using a case-insensitive key."""
+    key_list = list(dict_like.keys())
+    key_list_lower = [k.lower() for k in key_list]
+    if key.lower() not in key_list_lower:
+        raise KeyError(f"could not find {key} in {dict_like}")
+    ind = key_list_lower.index(key.lower())
+    return dict_like[key_list[ind]]
+
+
 def get_tracer(config, key):
     """Load tracer information."""
     nside = config["nside"]
     name = config[key]["name"]
     data_dir = config[key]["data_dir"]
+    if "healpix" in config[key].keys():
+        tracer_type = "healpix"
+    elif "catalog" in config[key].keys():
+        tracer_type = "catalog"
+    else:
+        raise ValueError(f"Tracer {key} must have either a 'healpix' or 'catalog' section")
     if "bins" in config[key].keys():
         bins = config[key]["bins"]
     else:
@@ -42,23 +59,55 @@ def get_tracer(config, key):
     print(name, f"({bins} bins)" if bins > 1 else '')
 
     tracer_bins = []
-    for bin in range(bins):
-        bin_name = name if bins == 1 else f"{name} (bin {bin})"
-        map_file = data_dir + '/' + config[key]["map"].format(bin=bin, nside=nside)
-        mask_file = data_dir + '/' + config[key]["mask"].format(bin=bin, nside=nside)
+    for bin_i in range(bins):
+        bin_name = name if bins == 1 else f"{name} (bin {bin_i})"
+
         if "beam" in config[key].keys():
-            beam_file = data_dir + '/' + config[key]["beam"].format(bin=bin, nside=nside)
+            if config[key]["beam"] == "pixwin":
+                beam = hp.pixwin(nside)
+            beam_file = data_dir + '/' + config[key]["beam"].format(bin=bin_i, nside=nside)
         else:
             beam = np.ones(3*nside)
 
-        maps = np.atleast_2d(hp.read_map(map_file, field=None)).astype(float)
-        if correct_qu_sign and len(maps) == 2:
-            maps = np.array([-maps[0], maps[1]])
+        if tracer_type == "healpix":
+            map_file = data_dir + '/' + config[key]["healpix"]["map"].format(bin=bin_i, nside=nside)
+            mask_file = data_dir + '/' + config[key]["healpix"]["mask"].format(bin=bin_i, nside=nside)
 
-        mask = hp.read_map(mask_file).astype(float)
-        if use_mask_squared: mask = mask**2
+            maps = np.atleast_2d(hp.read_map(map_file, field=None)).astype(float)
+            if correct_qu_sign and len(maps) == 2:
+                maps = np.array([-maps[0], maps[1]])
+            mask = hp.read_map(mask_file).astype(float)
+            if use_mask_squared: mask = mask**2
+            tracer = MapTracer(bin_name, maps, mask, beam=beam)
 
-        tracer = MapTracer(bin_name, maps, mask, beam=beam)
+        elif tracer_type == "catalog":
+            cat_file = data_dir + '/' + config[key]["catalog"]["file"].format(bin=bin_i)
+            catalog = Table.read(cat_file)
+            pos = [get_ul_key(catalog, "ra"), get_ul_key(catalog, "dec")]
+            try:
+                weights = get_ul_key(catalog, "weight")
+            except KeyError:
+                weights = np.ones(len(catalog))
+            if "fields" in config[key]["catalog"].keys():
+                fields = [catalog[f] for f in config[key]["catalog"]["fields"]]
+                if correct_qu_sign and len(fields) == 2:
+                    fields = [-fields[0], fields[1]]
+                pos_rand = None
+                weights_rand = None
+            elif "randoms" in config[key]["catalog"].keys():
+                fields = None
+                rand_file = data_dir + '/' + config[key]["catalog"]["randoms"].format(bin=bin_i)
+                rand_cat = Table.read(rand_file)
+                pos_rand = [get_ul_key(rand_cat, "ra"), get_ul_key(rand_cat, "dec")]
+                try:
+                    weights_rand = get_ul_key(rand_cat, "weight")
+                except KeyError:
+                    weights_rand = np.ones(len(rand_cat))
+            else:
+                raise ValueError(f"Must specify either fields or randoms in {tracer_key}")
+            tracer = CatalogTracer(bin_name, pos, weights, 3*nside-1, fields=fields, beam=beam,
+                                   pos_rand=pos_rand, weights_rand=weights_rand)
+
         print(tracer)
         tracer_bins.append(tracer)
 
@@ -138,6 +187,7 @@ def main():
         wksp_dir = None
     else:
         wksp_dir = config["workspace_dir"]
+    print("Using workspace cache:", wksp_dir)
 
     for xspec_key in xspec_keys:
         xspec_list = config[xspec_key]["list"]
