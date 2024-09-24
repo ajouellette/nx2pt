@@ -34,18 +34,9 @@ def get_tracer(config, key):
         tracer_type = "catalog"
     else:
         raise ValueError(f"Tracer {key} must have either a 'healpix' or 'catalog' section")
-    if "bins" in config[key].keys():
-        bins = config[key]["bins"]
-    else:
-        bins = 1
-    if "use_mask_squared" in config[key].keys():
-        use_mask_squared = config[key]["use_mask_squared"]
-    else:
-        use_mask_squared = False
-    if "correct_qu_sign" in config[key].keys():
-        correct_qu_sign = config[key]["correct_qu_sign"]
-    else:
-        correct_qu_sign = False
+    bins = config[key].get("bins", 1)
+    use_mask_squared = config[key].get("use_mask_squared", False)
+    correct_qu_sign = config[key].get("correct_qu_sign", False)
 
     print(name, f"({bins} bins)" if bins > 1 else '')
 
@@ -174,22 +165,15 @@ def main():
     nmt_bins = nmt.NmtBin.from_edges(ell_bins[:-1], ell_bins[1:])
     ell_eff = nmt_bins.get_effective_ells()
     print(f"Will calculate {len(ell_eff)} bandpowers between ell = {ell_bins[0]} and ell = {ell_bins[-1]}")
-    if args.no_cache:
-        wksp_dir = None
-    else:
-        wksp_dir = config["workspace_dir"]
+    wksp_dir = None if args.no_cache else config["workspace_dir"]
     print("Using workspace cache:", wksp_dir)
 
     for xspec_key in xspec_keys:
         xspec_list = config[xspec_key]["list"]
         print("Computing set", xspec_list)
 
-        calc_cov = False
-        calc_interbin_cov = False
-        if "covariance" in config[xspec_key].keys():
-            calc_cov = config[xspec_key]["covariance"]
-        if "interbin_cov" in config[xspec_key].keys():
-            calc_interbin_cov = config[xspec_key]["interbin_cov"]
+        calc_cov = config[xspec_key].get("covariance", False)
+        calc_interbin_cov = config[xspec_key].get("interbin_cov", False)
 
         # calculate everything
         cls, bpws, covs = compute_cls_cov(tracers, xspec_list, nmt_bins, compute_cov=calc_cov,
