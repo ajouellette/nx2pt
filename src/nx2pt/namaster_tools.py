@@ -7,6 +7,25 @@ import joblib
 from .utils import parse_tracer_bin, parse_cl_key
 
 
+def get_bpw_edges(lmin, lmax, nbpws, kind):
+    if kind == "linear":
+        return np.linspace(lmin, lmax, nbpws+1, dtype=int)
+    elif kind == "log":
+        return np.geomspace(lmin, lmax, nbpws+1, dtype=int)
+    elif kind == "sqrt":
+        return (np.linspace(np.sqrt(lmin), np.sqrt(lmax), nbpws+1)**2).astype(int)
+    else:
+        raise ValueError("kind should be one of: linear, log, sqrt")
+
+
+def get_nmtbins(nside, bpw_edges, weights=None, f_ell=None):
+    ells = np.arange(3*nside)
+    nbpws = len(bpw_edges) - 1
+    bpws = np.digitize(ells, bpw_edges) - 1
+    bpws[bpws == nbpws] = -1
+    return nmt.NmtBin(ells=ells, bpws=bpws, weights=weights, f_ell=f_ell)
+
+
 def get_workspace(nmt_field1, nmt_field2, nmt_bins, wksp_cache=None):
     """Get the NmtWorkspace for given fields and bins (with caching)."""
 

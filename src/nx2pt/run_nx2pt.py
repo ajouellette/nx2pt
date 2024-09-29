@@ -10,17 +10,27 @@ import sacc
 from astropy.table import Table
 
 from .tracer import MapTracer, CatalogTracer
+from .namaster_tools import get_bpw_edges, get_nmtbins
 from .namaster_tools import compute_cls_cov
 from .utils import get_ul_key, parse_cl_key, parse_tracer_bin
 
 
-def get_ell_bins(config):
+def get_ell_bins(nside, config):
     """Generate ell bins from config."""
-    nside = config["nside"]
-    ell_min = config["ell_min"]
-    dl = config["delta_ell"]
-    ell_bins = np.linspace(ell_min, 3*nside, int((3*nside - ell_min) / dl) + 1, dtype=int)
-    return ell_bins
+    bpw_edges = config.get("bpw_edges", None)
+    if bpw_edges is None:
+        kind = config.get("kind", "linear")
+        lmin = config.get("ell_min", 2)
+        lmax = config.get("ell_max", 3*nside-1)
+        nbpws = config.get("nbpws", None)
+        if nbpws is None and kind == "linear":
+            delta_ell = config["delta_ell"]
+            nbpws = (lmax - lmin) // delta_ell
+        elif nbpws is None:
+            raise ValueError("Must specify nbpws for non-linear binning")
+        bpw_edges = get_bpw_edges(lmin, lmax, nbpws, kind)
+    nmt_bin = get_nmtbins(nside, bpw_edges)
+    return nmt_bin
 
 
 def get_tracer(config, key):
@@ -139,6 +149,7 @@ def save_npz(file_name, ell_eff, cls, covs, bpws):
 def main():
     parser = argparse.ArgumentParser(description="Run a Nx2-point analysis pipeline")
     parser.add_argument("config_file", help="YAML file specifying pipeline to run")
+    parser.add_argument("--nside", help="overrides nside in config file", type=int, default=None)
     parser.add_argument("--no-cache", action="store_true", help="Don't use the workspace cache")
     args = parser.parse_args()
     print(args)
@@ -147,6 +158,10 @@ def main():
         config = yaml.full_load(f)
 
     print(config)
+    nside = config["nside"]
+    if args.nside is not None: nside = args.nside
+    nmt_bins = get_ell_bins(nside, config["binning"])
+    ell_eff = nmt_bins.get_effective_ells()
 
     tracer_keys = [key for key in config.keys() if key.startswith("tracer")]
     print(f"Found {len(tracer_keys)} tracers")
@@ -161,10 +176,6 @@ def main():
         if "save_npz" not in config[xspec_key].keys() and "save_sacc" not in config[xspec_key].keys():
             print(f"Warning! No output will be saved for the block {xspec_key}")
 
-    ell_bins = get_ell_bins(config)
-    nmt_bins = nmt.NmtBin.from_edges(ell_bins[:-1], ell_bins[1:])
-    ell_eff = nmt_bins.get_effective_ells()
-    print(f"Will calculate {len(ell_eff)} bandpowers between ell = {ell_bins[0]} and ell = {ell_bins[-1]}")
     wksp_dir = None if args.no_cache else config["workspace_dir"]
     print("Using workspace cache:", wksp_dir)
 
