@@ -33,9 +33,8 @@ def get_ell_bins(nside, config):
     return nmt_bin
 
 
-def get_tracer(config, key):
+def get_tracer(nside, config, key):
     """Load tracer information."""
-    nside = config["nside"]
     name = config[key]["name"]
     data_dir = config[key]["data_dir"]
     if "healpix" in config[key].keys():
@@ -167,7 +166,7 @@ def main():
     print(f"Found {len(tracer_keys)} tracers")
     tracers = dict()
     for tracer_key in tracer_keys:
-        tracer = get_tracer(config, tracer_key)
+        tracer = get_tracer(nside, config, tracer_key)
         tracers[tracer_key] = tracer
 
     xspec_keys = [key for key in config.keys() if key.startswith("cross_spectra")]
