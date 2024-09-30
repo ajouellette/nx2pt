@@ -70,6 +70,10 @@ def get_tracer(nside, config, key):
             mask = hp.read_map(mask_file).astype(float)
             if use_mask_squared: mask = mask**2
             tracer = MapTracer(bin_name, maps, mask, beam=beam)
+            noise_est = config[key]["healpix"].get("noise_est", 0)
+            if not isinstance(noise_est, list):
+                noise_est = [noise_est,]
+            tracer.noise_est = noise_est[bin_i]
 
         elif tracer_type == "catalog":
             cat_file = data_dir + '/' + config[key]["catalog"]["file"].format(bin=bin_i)
@@ -184,10 +188,12 @@ def main():
 
         calc_cov = config[xspec_key].get("covariance", False)
         calc_interbin_cov = config[xspec_key].get("interbin_cov", False)
+        subtract_noise = config[xspec_key].get("subtract_noise", False)
 
         # calculate everything
-        cls, bpws, covs = compute_cls_cov(tracers, xspec_list, nmt_bins, compute_cov=calc_cov,
-                                          compute_interbin_cov=calc_interbin_cov, wksp_cache=wksp_dir)
+        cls, bpws, covs = compute_cls_cov(tracers, xspec_list, nmt_bins, subtract_noise=subtract_noise,
+                                          compute_cov=calc_cov, compute_interbin_cov=calc_interbin_cov,
+                                          wksp_cache=wksp_dir)
 
         # save all cross-spectra
         if "save_npz" in config[xspec_key].keys():

@@ -8,6 +8,7 @@ from .utils import parse_tracer_bin, parse_cl_key
 
 
 def get_bpw_edges(lmin, lmax, nbpws, kind):
+    """Generate bandpower edges."""
     if kind == "linear":
         return np.linspace(lmin, lmax, nbpws+1, dtype=int)
     elif kind == "log":
@@ -19,6 +20,7 @@ def get_bpw_edges(lmin, lmax, nbpws, kind):
 
 
 def get_nmtbins(nside, bpw_edges, weights=None, f_ell=None):
+    """Generate NmtBin from nside and bandpower edges."""
     ells = np.arange(3*nside)
     nbpws = len(bpw_edges) - 1
     bpws = np.digitize(ells, bpw_edges) - 1
@@ -135,7 +137,8 @@ def compute_gaussian_cov(wksp_dir, nmt_field1a, nmt_field2a, nmt_field1b, nmt_fi
     return cov
 
 
-def compute_cls_cov(tracers, xspectra_list, bins, compute_cov=True, compute_interbin_cov=True, wksp_cache=None):
+def compute_cls_cov(tracers, xspectra_list, bins, subtract_noise=False, compute_cov=True,
+                    compute_interbin_cov=True, wksp_cache=None):
     """Calculate all cross-spectra and covariances from a list of tracers."""
     cls = dict()
     wksps = dict()
@@ -152,6 +155,15 @@ def compute_cls_cov(tracers, xspectra_list, bins, compute_cov=True, compute_inte
                 print("computing cross-spectrum", cl_key)
                 wksp = get_workspace(tracer1[i].field, tracer2[j].field, bins, wksp_cache=wksp_cache)
                 pcl = nmt.compute_coupled_cell(tracer1[i].field, tracer2[j].field)
+                # only subtract noise from auto-spectra
+                if subtract_noise and i == j and tracer1 == tracer2:
+                    print(f"subtracting noise estimate: {tracer1[i].noise_est:.4e}")
+                    # only subtract from EE, BB if spin-2
+                    if tracer1[i].spin == 0:
+                        pcl -= tracer1[i].noise_est
+                    else:
+                        pcl[0] -= tracer1[i].noise_est
+                        pcl[-1] -= tracer1[i].noise_est
                 cl = wksp.decouple_cell(pcl)
                 # save quantities
                 cls[cl_key] = cl
