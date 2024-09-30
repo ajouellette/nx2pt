@@ -17,8 +17,9 @@ A very simple example of a `pipeline.yaml` file is given below:
 ```yaml
 nside: 1024
 # binning scheme for cross-spectra
-ell_min: 2
-delta_ell: 50
+binning:
+    kind = "linear"
+    delta_ell = 50
 # where to save namaster workspaces containg the mode coupling matrices
 workspace_dir: "workspaces"
 
