@@ -9,6 +9,7 @@ import joblib
 import sacc
 from astropy.table import Table
 
+from .data import Data
 from .tracer import MapTracer, CatalogTracer
 from .namaster_tools import get_bpw_edges, get_nmtbins
 from .namaster_tools import compute_cls_cov
@@ -108,46 +109,6 @@ def get_tracer(nside, tracer_config):
     return tracer_bins
 
 
-def save_sacc(file_name, tracers, ell_eff, cls, covs, bpws, ignore_b_modes=True, metadata=None):
-    s = sacc.Sacc()
-    # metadata
-    s.metadata["creation"] = datetime.date.today().isoformat()
-    if metadata is not None:
-        for key in metadata:
-            s.metadata[key] = metadata[key]
-    # tracers (currently only save as misc tracers)
-    for tracer_key in tracers.keys():
-        for i in range(len(tracers[tracer_key])):
-            sacc_name = tracer_key.rstrip("tracer_") + f"_{i}"
-            s.add_tracer("Misc", sacc_name)
-    # data
-    for cl_key in cls.keys():
-        (tracer1, bin1), (tracer2, bin2) = parse_cl_key(cl_key)
-        sacc_name1 = tracer1.rstrip("tracer_") + f"_{bin1}"
-        sacc_name2 = tracer2.rstrip("tracer_") + f"_{bin2}"
-        bpw = bpws[cl_key]
-        # possible spin combinations
-        if tracers[tracer1][bin1].spin == 0 and tracers[tracer2][bin2].spin == 0:
-            s.add_ell_cl("cl_00", sacc_name1, sacc_name2, ell_eff, cls[cl_key][0])
-        elif tracers[tracer1][bin1].spin == 2 and tracers[tracer2][bin2].spin == 0:
-            s.add_ell_cl("cl_e0", sacc_name1, sacc_name2, ell_eff, cls[cl_key][0])
-
-    # covariance
-
-    # write
-
-
-
-def save_npz(file_name, ell_eff, cls, covs, bpws):
-    """Save cross-spectra, covariances, and bandpower windows to a .npz file."""
-    assert bpws.keys() == cls.keys(), "Each cross-spectrum should have a corresponding bandpower window"
-    save_dict = {"cl_" + str(cl_key): cls[cl_key] for cl_key in cls.keys()} | \
-                {"cov_" + str(cov_key): covs[cov_key] for cov_key in covs.keys()} | \
-                {"bpw_" + str(cl_key): bpws[cl_key] for cl_key in cls.keys()} | \
-                {"ell_eff": ell_eff}
-    np.savez(file_name, **save_dict)
-
-
 def main():
     parser = argparse.ArgumentParser(description="Run a Nx2-point analysis pipeline")
     parser.add_argument("config_file", help="YAML file specifying pipeline to run")
@@ -195,11 +156,13 @@ def main():
                                           compute_cov=calc_cov, compute_interbin_cov=calc_interbin_cov,
                                           wksp_cache=wksp_dir)
 
+        data = Data(ell_eff, cls, covs, bpws)
+
         # save all cross-spectra
         if "save_npz" in config[xspec_key].keys():
             save_npz_file = config[xspec_key]["save_npz"].format(nside=config["nside"])
             print("Saving to", save_npz_file)
-            save_npz(save_npz_file, ell_eff, cls, covs, bpws)
+            data.write_to_npz(save_npz_file)
 
         # create sacc file
         #if "save_sacc" in config.keys():

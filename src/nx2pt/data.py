@@ -81,9 +81,38 @@ class Data:
             covs.append(covs_i)
         return np.block(covs)
 
-    def write_to_sacc(self, filename):
-        pass
-
     def write_to_npz(self, filename):
-        pass
+        """Save cross-spectra, covariances, and bandpower windows to a .npz file."""
+        save_dict = {"cl_" + cl_key: self.cls[cl_key] for cl_key in self.cls.keys()} | \
+                    {"cov_" + cov_key: self.covs[cov_key] for cov_key in self.covs.keys()} | \
+                    {"bpw_" + cl_key: self.bpws[cl_key] for cl_key in self.cls.keys()} | \
+                    {"ell_eff": self.ell_eff}
+        np.savez(filename, **save_dict)
 
+    def write_to_sacc(self, filename):
+        s = sacc.Sacc()
+        # metadata
+        s.metadata["creation"] = datetime.date.today().isoformat()
+        if metadata is not None:
+            for key in metadata:
+                s.metadata[key] = metadata[key]
+        # tracers (currently only save as misc tracers)
+        for tracer_key in tracers.keys():
+            for i in range(len(tracers[tracer_key])):
+                sacc_name = tracer_key.rstrip("tracer_") + f"_{i}"
+                s.add_tracer("Misc", sacc_name)
+        # data
+        for cl_key in cls.keys():
+            (tracer1, bin1), (tracer2, bin2) = parse_cl_key(cl_key)
+            sacc_name1 = tracer1.rstrip("tracer_") + f"_{bin1}"
+            sacc_name2 = tracer2.rstrip("tracer_") + f"_{bin2}"
+            bpw = bpws[cl_key]
+            # possible spin combinations
+            if tracers[tracer1][bin1].spin == 0 and tracers[tracer2][bin2].spin == 0:
+                s.add_ell_cl("cl_00", sacc_name1, sacc_name2, ell_eff, cls[cl_key][0])
+            elif tracers[tracer1][bin1].spin == 2 and tracers[tracer2][bin2].spin == 0:
+                s.add_ell_cl("cl_e0", sacc_name1, sacc_name2, ell_eff, cls[cl_key][0])
+
+        # covariance
+
+        # write
