@@ -15,16 +15,16 @@ from .namaster_tools import compute_cls_cov
 from .utils import get_ul_key, parse_cl_key, parse_tracer_bin
 
 
-def get_ell_bins(nside, config):
+def get_ell_bins(nside, bin_config):
     """Generate ell bins from config."""
-    bpw_edges = config.get("bpw_edges", None)
+    bpw_edges = bin_config.get("bpw_edges", None)
     if bpw_edges is None:
-        kind = config.get("kind", "linear")
-        lmin = config.get("ell_min", 2)
-        lmax = config.get("ell_max", 3*nside-1)
-        nbpws = config.get("nbpws", None)
+        kind = bin_config.get("kind", "linear")
+        lmin = bin_config.get("ell_min", 2)
+        lmax = bin_config.get("ell_max", 3*nside-1)
+        nbpws = bin_config.get("nbpws", None)
         if nbpws is None and kind == "linear":
-            delta_ell = config["delta_ell"]
+            delta_ell = bin_config["delta_ell"]
             nbpws = (lmax - lmin) // delta_ell
         elif nbpws is None:
             raise ValueError("Must specify nbpws for non-linear binning")
@@ -33,19 +33,19 @@ def get_ell_bins(nside, config):
     return nmt_bin
 
 
-def get_tracer(nside, config, key):
+def get_tracer(nside, tracer_config):
     """Load tracer information."""
-    name = config[key]["name"]
-    data_dir = config[key]["data_dir"]
-    if "healpix" in config[key].keys():
+    name = tracer_config["name"]
+    data_dir = tracer_config["data_dir"]
+    if "healpix" in tracer_config.keys():
         tracer_type = "healpix"
-    elif "catalog" in config[key].keys():
+    elif "catalog" in tracer_config.keys():
         tracer_type = "catalog"
     else:
         raise ValueError(f"Tracer {key} must have either a 'healpix' or 'catalog' section")
-    bins = config[key].get("bins", 1)
-    use_mask_squared = config[key].get("use_mask_squared", False)
-    correct_qu_sign = config[key].get("correct_qu_sign", False)
+    bins = tracer_config.get("bins", 1)
+    use_mask_squared = tracer_config.get("use_mask_squared", False)
+    correct_qu_sign = tracer_config.get("correct_qu_sign", False)
 
     print(name, f"({bins} bins)" if bins > 1 else '')
 
@@ -53,45 +53,45 @@ def get_tracer(nside, config, key):
     for bin_i in range(bins):
         bin_name = name if bins == 1 else f"{name} (bin {bin_i})"
 
-        if "beam" in config[key].keys():
-            if config[key]["beam"] == "pixwin":
+        if "beam" in tracer_config.keys():
+            if tracer_config["beam"] == "pixwin":
                 beam = hp.pixwin(nside)
-            beam_file = data_dir + '/' + config[key]["beam"].format(bin=bin_i, nside=nside)
+            #beam_file = data_dir + '/' + config[key]["beam"].format(bin=bin_i, nside=nside)
         else:
             beam = np.ones(3*nside)
 
         if tracer_type == "healpix":
-            map_file = data_dir + '/' + config[key]["healpix"]["map"].format(bin=bin_i, nside=nside)
-            mask_file = data_dir + '/' + config[key]["healpix"]["mask"].format(bin=bin_i, nside=nside)
+            map_file = data_dir + '/' + tracer_config["healpix"]["map"].format(bin=bin_i, nside=nside)
+            mask_file = data_dir + '/' + tracer_config["healpix"]["mask"].format(bin=bin_i, nside=nside)
 
-            maps = np.atleast_2d(hp.read_map(map_file, field=None)).astype(float)
+            maps = np.atleast_2d(hp.read_map(map_file, field=None))
             if correct_qu_sign and len(maps) == 2:
                 maps = np.array([-maps[0], maps[1]])
-            mask = hp.read_map(mask_file).astype(float)
+            mask = hp.read_map(mask_file)
             if use_mask_squared: mask = mask**2
             tracer = MapTracer(bin_name, maps, mask, beam=beam)
-            noise_est = config[key]["healpix"].get("noise_est", 0)
+            noise_est = tracer_config["healpix"].get("noise_est", 0)
             if not isinstance(noise_est, list):
-                noise_est = [noise_est,]
+                noise_est = bins * [noise_est,]
             tracer.noise_est = noise_est[bin_i]
 
         elif tracer_type == "catalog":
-            cat_file = data_dir + '/' + config[key]["catalog"]["file"].format(bin=bin_i)
+            cat_file = data_dir + '/' + tracer_config["catalog"]["file"].format(bin=bin_i)
             catalog = Table.read(cat_file)
             pos = [get_ul_key(catalog, "ra"), get_ul_key(catalog, "dec")]
             try:
                 weights = get_ul_key(catalog, "weight")
             except KeyError:
                 weights = np.ones(len(catalog))
-            if "fields" in config[key]["catalog"].keys():
-                fields = [catalog[f] for f in config[key]["catalog"]["fields"]]
+            if "fields" in tracer_config["catalog"].keys():
+                fields = [catalog[f] for f in tracer_config["catalog"]["fields"]]
                 if correct_qu_sign and len(fields) == 2:
                     fields = [-fields[0], fields[1]]
                 pos_rand = None
                 weights_rand = None
-            elif "randoms" in config[key]["catalog"].keys():
+            elif "randoms" in tracer_config["catalog"].keys():
                 fields = None
-                rand_file = data_dir + '/' + config[key]["catalog"]["randoms"].format(bin=bin_i)
+                rand_file = data_dir + '/' + tracer_config["catalog"]["randoms"].format(bin=bin_i)
                 rand_cat = Table.read(rand_file)
                 pos_rand = [get_ul_key(rand_cat, "ra"), get_ul_key(rand_cat, "dec")]
                 try:
@@ -105,7 +105,6 @@ def get_tracer(nside, config, key):
 
         print(tracer)
         tracer_bins.append(tracer)
-
     return tracer_bins
 
 
@@ -161,17 +160,18 @@ def main():
         config = yaml.full_load(f)
 
     print(config)
-    nside = config["nside"]
-    if args.nside is not None: nside = args.nside
+    nside = config["nside"] if args.nside is None else args.nside
+    print("Nside", nside)
+
     nmt_bins = get_ell_bins(nside, config["binning"])
     ell_eff = nmt_bins.get_effective_ells()
 
-    tracer_keys = [key for key in config.keys() if key.startswith("tracer")]
+    tracer_keys = [key for key in config["tracers"].keys()]
     print(f"Found {len(tracer_keys)} tracers")
     tracers = dict()
     for tracer_key in tracer_keys:
-        tracer = get_tracer(nside, config, tracer_key)
-        tracers[tracer_key] = tracer
+        tracer_bins = get_tracer(nside, config["tracers"][tracer_key])
+        tracers[tracer_key] = tracer_bins
 
     xspec_keys = [key for key in config.keys() if key.startswith("cross_spectra")]
     print(f"Found {len(xspec_keys)} set(s) of cross-spectra to calculate")
