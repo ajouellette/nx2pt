@@ -21,28 +21,31 @@ binning:
     kind = "linear"
     delta_ell = 50
 # where to save namaster workspaces containg the mode coupling matrices
-workspace_dir: "workspaces"
+workspace_dir: "./workspaces"
 
-# define first tracer (some galaxy sample, for example)
-tracer1:
-  name: "Galaxy sample 1"
-  data_dir: "galaxies1"
-  map: "galaxy1_delta.fits"
-  mask: "galaxy1_mask.fits"
+tracers:
+    # define first tracer (some galaxy sample, for example)
+    gal1:
+        name: "Galaxy sample 1"
+        data_dir: "galaxies1"
+        healpix:
+            map: "galaxy1_delta.fits"
+            mask: "galaxy1_mask.fits"
 
-# define second tracer (some other galaxy sample)
-tracer2:
-  name: "Galaxy sample 2"
-  data_dir: "galaxies2"
-  map: "galaxy2_delta.fits"
-  mask: "galaxy2_mask.fits"
+    # define second tracer (some other galaxy sample)
+    gal2:
+        name: "Galaxy sample 2"
+        data_dir: "galaxies2"
+        healpix:
+            map: "galaxy2_delta.fits"
+            mask: "galaxy2_mask.fits"
 
 cross_spectra:
   # calculate all auto- and cross-spectra
   list:
-    - [tracer1, tracer2]
-    - [tracer1, tracer1]
-    - [tracer2, tracer2]
+    - [gal1, gal2]
+    - [gal1, gal1]
+    - [gal2, gal2]
   # calculate full covariance
   covariance: True
   # save everything to a .npz file
