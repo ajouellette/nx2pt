@@ -160,7 +160,7 @@ def main():
 
         # save all cross-spectra
         if "save_npz" in config[xspec_key].keys():
-            save_npz_file = config[xspec_key]["save_npz"].format(nside=config["nside"])
+            save_npz_file = config[xspec_key]["save_npz"].format(nside=nside)
             print("Saving to", save_npz_file)
             data.write_to_npz(save_npz_file)
 
