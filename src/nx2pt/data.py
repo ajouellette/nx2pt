@@ -27,12 +27,19 @@ def get_cl_dtypes(ncls):
 
 class Data:
 
-    def __init__(self, ell_eff, cls, covs, bpws):
+    def __init__(self, ell_eff, cls, covs, bpws, tracers=None):
         self.ell_eff = ell_eff
         self.cls = cls
         self.covs = covs
         self.bpws = bpws
         self.nbpws = len(ell_eff)
+        if tracers is not None:
+            self.tracer_info = dict()
+            for key, tracer_bins in tracers.items():
+                for i, tracer_bin in enumerate(tracer_bins):
+                    self.tracer_info[f"{key}_{i}"] = dict(description=tracer_bin.name, spin=tracer_bin.spin)
+        else:
+            self.tracer_info = None
 
     @property
     def tracers(self):
@@ -53,6 +60,7 @@ class Data:
 
     @classmethod
     def from_npz(cls, filename):
+        """Load data from a .npz file."""
         cls = dict()
         covs = dict()
         bpws = dict()
@@ -75,7 +83,9 @@ class Data:
     def from_theory_cls(cls, theory_cls, covs, bpws):
         pass
 
-    def get_cl(self, tracer1, tracer2, dtype=None):
+    def get_cl(self, tracer1, tracer2=None, dtype=None):
+        if tracer2 is None:
+            tracer2 = tracer1
         cl_key1 = f"{tracer1}, {tracer2}"
         cl_key2 = f"{tracer2}, {tracer1}"
         try:
@@ -91,7 +101,10 @@ class Data:
         return cl[ind]
 
 
-    def get_cov(self, cl1, cl2, dtype1=None, dtype2=None):
+    def get_cov(self, cl1, cl2=None, dtype1=None, dtype2=None):
+        """Get covariance of cl1 and cl2."""
+        if cl2 is None:
+            cl2 = cl1
         cov_key1 = f"{cl1}, {cl2}"
         cov_key2 = f"{cl2}, {cl1}"
         try:
@@ -104,6 +117,8 @@ class Data:
                 raise KeyError(f"could not find Cov for Cls {cl1} and {cl2}")
         if dtype1 is None and dtype2 is None:
             return cov
+        if dtype2 is None:
+            dtype2 = dtype1
         ncls = np.array(cov.shape) // self.nbpws
         ind1 = get_cl_dtypes(ncls[0]).index(dtype1)
         ind2 = get_cl_dtypes(ncls[1]).index(dtype2)
@@ -148,7 +163,11 @@ class Data:
                 s.metadata[key] = metadata[key]
         # tracers (currently only save as misc tracers)
         for tracer in self.tracers:
-            s.add_tracer("Misc", tracer)
+            if self.tracer_info is not None:
+                tracer_meta = self.tracer_info.get(tracer, None)
+            else:
+                tracer_meta = None
+            s.add_tracer("Misc", tracer, metadata=tracer_meta)
         # data
         for tracer1, tracer2 in self.tracer_pairs:
             cl_key = f"{tracer1}, {tracer2}"
@@ -161,16 +180,8 @@ class Data:
                 ell = np.arange(nmt_bpws.shape[-1])
                 bpws = [sacc.BandpowerWindow(ell, nmt_bpws[i,:,i,:].T) for i in range(len(cl))]
             # possible spin combinations
-            if len(cl) == 1:
-                s.add_ell_cl("cl_00", tracer1, tracer2, self.ell_eff, cl[0], window=bpws[0])
-            elif len(cl) == 2:
-                for i, dtype in enumerate(["cl_0e", "cl_0b"]):
-                    s.add_ell_cl(dtype, tracer1, tracer2, self.ell_eff, cl[i], window=bpws[i])
-            elif len(cl) == 4:
-                for i, dtype in enumerate(["cl_ee", "cl_eb", "cl_be", "cl_bb"]):
-                    s.add_ell_cl(dtype, tracer1, tracer2, self.ell_eff, cl[i], window=bpws[i])
-            else:
-                raise ValueError("number of Cls should be 1, 2, or 4")
+            for i, dtype in enumerate(get_cl_dtypes(len(cl))):
+                s.add_ell_cl(dtype, tracer1, tracer2, self.ell_eff, cl[i], window=bpws[i])
         # covariance
         if self.covs == {}:
             warnings.warn("Data has no covariance information")

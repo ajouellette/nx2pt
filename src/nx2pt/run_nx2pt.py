@@ -156,7 +156,7 @@ def main():
                                           compute_cov=calc_cov, compute_interbin_cov=calc_interbin_cov,
                                           wksp_cache=wksp_dir)
 
-        data = Data(ell_eff, cls, covs, bpws)
+        data = Data(ell_eff, cls, covs, bpws, tracers=tracers)
 
         # save all cross-spectra
         if "save_npz" in config[xspec_key].keys():
@@ -165,5 +165,8 @@ def main():
             data.write_to_npz(save_npz_file)
 
         # create sacc file
-        #if "save_sacc" in config.keys():
-            #print("Creating sacc file")
+        if "save_sacc" in config[xspec_key].keys():
+            save_sacc_file = config[xspec_key]["save_sacc"]["file"]
+            print("Saving to", save_sacc_file)
+            metadata = config[xspec_key]["save_sacc"].get("metadata", None)
+            data.write_to_sacc(save_sacc_file, metadata=metadata)
