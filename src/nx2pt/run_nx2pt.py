@@ -166,7 +166,7 @@ def main():
 
         # create sacc file
         if "save_sacc" in config[xspec_key].keys():
-            save_sacc_file = config[xspec_key]["save_sacc"]["file"]
+            save_sacc_file = config[xspec_key]["save_sacc"]["file"].format(nside=nside)
             print("Saving to", save_sacc_file)
             metadata = config[xspec_key]["save_sacc"].get("metadata", None)
             data.write_to_sacc(save_sacc_file, metadata=metadata)
