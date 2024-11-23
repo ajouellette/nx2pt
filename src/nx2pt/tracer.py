@@ -30,6 +30,7 @@ class MapTracer(Tracer):
     Optional arguments:
     beam: array - instrument beam or smoothing that has been applied to the field
     dndz: tuple of arrays - (z, dndz), redshift distribution of the tracer
+    masked_on_input: bool 
 
     Attributes:
     nside: int - the healpix nside parameter for this tracer
@@ -40,6 +41,7 @@ class MapTracer(Tracer):
     nside: int = field(init=False)
     maps: list[np.array] = field(repr=False)
     mask: np.array = field(repr=False)
+    masked_on_input: bool = field(repr=False, default=False, kw_only=True)
 
     def __post_init__(self):
         self.is_cat_field = False
@@ -56,7 +58,7 @@ class MapTracer(Tracer):
         else:
             raise ValueError("Only spin-0 or spin-2 supported")
         # namaster field
-        self.field = nmt.NmtField(self.mask, self.maps, spin=self.spin, beam=self.beam)
+        self.field = nmt.NmtField(self.mask, self.maps, spin=self.spin, beam=self.beam, masked_on_input=self.masked_on_input)
 
 
 @dataclass
