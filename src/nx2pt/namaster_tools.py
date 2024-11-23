@@ -150,7 +150,10 @@ def compute_cls_cov(tracers, xspectra_list, bins, subtract_noise=False, compute_
         tracer2 = tracers[tracer2_key]
         # loop over all bins
         for i in range(len(tracer1)):
-            for j in range(i, len(tracer2)):
+            for j in range(len(tracer2)):
+                # skip duplicates
+                if tracer1 == tracer2 and j < i:
+                    continue
                 cl_key = f"{tracer1_key}_{i}, {tracer2_key}_{j}"
                 print("computing cross-spectrum", cl_key)
                 wksp = get_workspace(tracer1[i].field, tracer2[j].field, bins, wksp_cache=wksp_cache)
