@@ -45,6 +45,7 @@ def get_tracer(nside, tracer_config):
     else:
         raise ValueError(f"Tracer {key} must have either a 'healpix' or 'catalog' section")
     bins = tracer_config.get("bins", 1)
+    bins_one_indexed = tracer_config.get("bins_one_indexed", False)
     use_mask_squared = tracer_config.get("use_mask_squared", False)
     correct_qu_sign = tracer_config.get("correct_qu_sign", False)
 
@@ -62,22 +63,23 @@ def get_tracer(nside, tracer_config):
             beam = np.ones(3*nside)
 
         if tracer_type == "healpix":
-            map_file = data_dir + '/' + tracer_config["healpix"]["map"].format(bin=bin_i, nside=nside)
-            mask_file = data_dir + '/' + tracer_config["healpix"]["mask"].format(bin=bin_i, nside=nside)
+            map_file = data_dir + '/' + tracer_config["healpix"]["map"].format(bin=bin_i if not bins_one_indexed else bin_i+1, nside=nside)
+            mask_file = data_dir + '/' + tracer_config["healpix"]["mask"].format(bin=bin_i if not bins_one_indexed else bin_i+1, nside=nside)
+            is_masked = tracer_config["healpix"].get("is_masked", False)
 
             maps = np.atleast_2d(hp.read_map(map_file, field=None))
             if correct_qu_sign and len(maps) == 2:
                 maps = np.array([-maps[0], maps[1]])
             mask = hp.read_map(mask_file)
             if use_mask_squared: mask = mask**2
-            tracer = MapTracer(bin_name, maps, mask, beam=beam)
+            tracer = MapTracer(bin_name, maps, mask, beam=beam, masked_on_input=is_masked)
             noise_est = tracer_config["healpix"].get("noise_est", 0)
             if not isinstance(noise_est, list):
                 noise_est = bins * [noise_est,]
             tracer.noise_est = noise_est[bin_i]
 
         elif tracer_type == "catalog":
-            cat_file = data_dir + '/' + tracer_config["catalog"]["file"].format(bin=bin_i)
+            cat_file = data_dir + '/' + tracer_config["catalog"]["file"].format(bin=bin_i if not bins_one_indexed else bin_i+1)
             catalog = Table.read(cat_file)
             pos = [get_ul_key(catalog, "ra"), get_ul_key(catalog, "dec")]
             try:
@@ -104,9 +106,12 @@ def get_tracer(nside, tracer_config):
             tracer = CatalogTracer(bin_name, pos, weights, 3*nside-1, fields=fields, beam=beam,
                                    pos_rand=pos_rand, weights_rand=weights_rand)
 
-        print(tracer)
         tracer_bins.append(tracer)
     return tracer_bins
+
+
+def parse_cross_spectra(config):
+    pass
 
 
 def main():
@@ -132,6 +137,7 @@ def main():
     tracers = dict()
     for tracer_key in tracer_keys:
         tracer_bins = get_tracer(nside, config["tracers"][tracer_key])
+        print(tracer_bins)
         tracers[tracer_key] = tracer_bins
 
     xspec_keys = [key for key in config.keys() if key.startswith("cross_spectra")]
