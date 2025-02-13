@@ -4,7 +4,7 @@ import healpy as hp
 import pymaster as nmt
 
 
-@dataclass
+@dataclass(eq=False)
 class Tracer:
     """
     Base class (not useable on its own) representing a field defined on the sky.
