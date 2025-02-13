@@ -10,7 +10,7 @@ authors = [
 ]
 description = "A framework for running general Nx2-point analyses"
 readme = "README.md"
-license = "LICENSE"
+license = {file = "LICENSE"}
 dependencies = [
     "healpy",
     "pymaster >= 2.2",
