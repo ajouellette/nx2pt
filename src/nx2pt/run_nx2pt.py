@@ -1,5 +1,6 @@
 import argparse
 import os
+from os import path
 import sys
 import yaml
 import numpy as np
@@ -52,8 +53,9 @@ def get_tracer(nside, tracer_config):
     print(name, f"({bins} bins)" if bins > 1 else '')
 
     tracer_bins = []
-    for bin_i in range(bins):
-        bin_name = name if bins == 1 else f"{name} (bin {bin_i})"
+    bin_inds = range(1, bins+1) if bins_one_indexed else range(bins)
+    for ind, bin_i in enumerate(bin_inds):
+        bin_name = name if bins == 1 else f"{name} (bin {ind})"
 
         if "beam" in tracer_config.keys():
             if tracer_config["beam"] == "pixwin":
@@ -63,23 +65,25 @@ def get_tracer(nside, tracer_config):
             beam = np.ones(3*nside)
 
         if tracer_type == "healpix":
-            map_file = data_dir + '/' + tracer_config["healpix"]["map"].format(bin=bin_i if not bins_one_indexed else bin_i+1, nside=nside)
-            mask_file = data_dir + '/' + tracer_config["healpix"]["mask"].format(bin=bin_i if not bins_one_indexed else bin_i+1, nside=nside)
+            map_file = path.join(data_dir, tracer_config["healpix"]["map"].format(bin=bin_i, nside=nside))
+            mask_file = path.join(data_dir, tracer_config["healpix"]["mask"].format(bin=bin_i, nside=nside))
             is_masked = tracer_config["healpix"].get("is_masked", False)
 
             maps = np.atleast_2d(hp.read_map(map_file, field=None))
             if correct_qu_sign and len(maps) == 2:
                 maps = np.array([-maps[0], maps[1]])
+
             mask = hp.read_map(mask_file)
             if use_mask_squared: mask = mask**2
+
             tracer = MapTracer(bin_name, maps, mask, beam=beam, masked_on_input=is_masked)
             noise_est = tracer_config["healpix"].get("noise_est", 0)
             if not isinstance(noise_est, list):
                 noise_est = bins * [noise_est,]
-            tracer.noise_est = noise_est[bin_i]
+            tracer.noise_est = noise_est[ind]
 
         elif tracer_type == "catalog":
-            cat_file = data_dir + '/' + tracer_config["catalog"]["file"].format(bin=bin_i if not bins_one_indexed else bin_i+1)
+            cat_file = path.join(data_dir, tracer_config["catalog"]["file"].format(bin=bin_i))
             catalog = Table.read(cat_file)
             pos = [get_ul_key(catalog, "ra"), get_ul_key(catalog, "dec")]
             try:
@@ -94,7 +98,7 @@ def get_tracer(nside, tracer_config):
                 weights_rand = None
             elif "randoms" in tracer_config["catalog"].keys():
                 fields = None
-                rand_file = data_dir + '/' + tracer_config["catalog"]["randoms"].format(bin=bin_i)
+                rand_file = path.join(data_dir, tracer_config["catalog"]["randoms"].format(bin=bin_i))
                 rand_cat = Table.read(rand_file)
                 pos_rand = [get_ul_key(rand_cat, "ra"), get_ul_key(rand_cat, "dec")]
                 try:
