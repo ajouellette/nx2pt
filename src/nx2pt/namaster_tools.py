@@ -1,4 +1,5 @@
 import os
+from os import path
 import numpy as np
 import healpy as hp
 import pymaster as nmt
@@ -36,11 +37,12 @@ def get_workspace(nmt_field1, nmt_field2, nmt_bins, wksp_cache=None):
         return wksp
 
     # hash on mask alms (to support catalog fields) and spins
+    # TODO: this operation is not symmetric wrt field1/field2
     hash_key = joblib.hash([nmt_field1.get_mask_alms(), nmt_field1.spin,
                             nmt_field2.get_mask_alms(), nmt_field2.spin])
-    wksp_file = f"{wksp_cache}/cl/{hash_key}.fits"
+    wksp_file = path.join(wksp_cache, f"cl/{hash_key}.fits")
 
-    try:
+    if path.isfile(wksp_file):
         # load from existing file
         wksp = nmt.NmtWorkspace.from_file(wksp_file)
         wksp.check_unbinned()
@@ -48,10 +50,10 @@ def get_workspace(nmt_field1, nmt_field2, nmt_bins, wksp_cache=None):
         # update bins and beams after loading
         wksp.update_beams(nmt_field1.beam, nmt_field2.beam)
         wksp.update_bins(nmt_bins)
-    except RuntimeError:
+    else:
         # compute and save to file
         wksp = nmt.NmtWorkspace.from_fields(nmt_field1, nmt_field2, nmt_bins)
-        os.makedirs(f"{wksp_cache}/cl", exist_ok=True)
+        os.makedirs(path.dirname(wksp_file), exist_ok=True)
         wksp.write_to(wksp_file)
 
     return wksp
@@ -78,15 +80,15 @@ def get_cov_workspace(nmt_field1a, nmt_field2a, nmt_field1b=None, nmt_field2b=No
                             nmt_field2a.get_mask(), nmt_field2a.spin,
                             nmt_field1b.get_mask(), nmt_field1b.spin,
                             nmt_field2b.get_mask(), nmt_field2b.spin])
-    wksp_file = f"{wksp_cache}/cov/{hash_key}.fits"
+    wksp_file = path.join(wksp_cache, f"cov/{hash_key}.fits")
 
-    try:
+    if path.isfile(wksp_file):
         wksp = nmt.NmtCovarianceWorkspace.from_file(wksp_file)
         print("Using cached workspace")
-    except RuntimeError:
+    else:
         wksp = nmt.NmtCovarianceWorkspace.from_fields(nmt_field1a, nmt_field2a,
                                                       nmt_field1b, nmt_field2b)
-        os.makedirs(f"{wksp_cache}/cov", exist_ok=True)
+        os.makedirs(path.dirname(wksp_file), exist_ok=True)
         wksp.write_to(wksp_file)
 
     return wksp
@@ -143,8 +145,10 @@ def compute_cls_cov(tracers, xspectra_list, bins, subtract_noise=False, compute_
     cls = dict()
     wksps = dict()
     bpws = dict()
+    if not isinstance(bins, list):
+        bins = len(xspectra_list) * [bins,]
     # loop over all cross-spectra
-    for xspec in xspectra_list:
+    for xspec, bins_ in zip(xspectra_list, bins):
         tracer1_key, tracer2_key = xspec
         tracer1 = tracers[tracer1_key]
         tracer2 = tracers[tracer2_key]
@@ -156,7 +160,7 @@ def compute_cls_cov(tracers, xspectra_list, bins, subtract_noise=False, compute_
                     continue
                 cl_key = f"{tracer1_key}_{i}, {tracer2_key}_{j}"
                 print("computing cross-spectrum", cl_key)
-                wksp = get_workspace(tracer1[i].field, tracer2[j].field, bins, wksp_cache=wksp_cache)
+                wksp = get_workspace(tracer1[i].field, tracer2[j].field, bins_, wksp_cache=wksp_cache)
                 pcl = nmt.compute_coupled_cell(tracer1[i].field, tracer2[j].field)
                 # only subtract noise from auto-spectra
                 if subtract_noise and i == j and tracer1 == tracer2:
