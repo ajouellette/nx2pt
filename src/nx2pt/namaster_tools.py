@@ -59,7 +59,8 @@ def get_workspace(nmt_field1, nmt_field2, nmt_bins, wksp_cache=None):
     return wksp
 
 
-def get_cov_workspace(nmt_field1a, nmt_field2a, nmt_field1b=None, nmt_field2b=None, wksp_cache=None):
+def get_cov_workspace(nmt_field1a, nmt_field2a, nmt_field1b=None, nmt_field2b=None,
+                      wksp_cache=None):
     """
     Get the NmtCovarianceWorkspace object needed to calculate the covariance between the
     cross-spectra (field1a, field2a) and (field1b, field2b).
@@ -109,24 +110,26 @@ def fsky(nmt_field1, nmt_field2):
     return np.mean(nmt_field1.get_mask() * nmt_field2.get_mask())
 
 
-def compute_gaussian_cov(wksp_dir, nmt_field1a, nmt_field2a, nmt_field1b, nmt_field2b, nmt_bins):
+def coupled_cl_over_fsky(nmt_field1, nmt_field2):
+    return nmt.compute_coupled_cl(nmt_field1, nmt_field2) / fsky(nmt_field1, nmt_field2)
+
+
+def compute_gaussian_cov(wksp_dir, nmt_field1a, nmt_field2a, nmt_field1b, nmt_field2b,
+                         nmt_bins):
     """Compute the Gaussian covariance between powerspectra A and B."""
     # get workspaces
-    cov_wksp = get_cov_workspace(wksp_dir, nmt_field1a, nmt_field2a, nmt_field1b, nmt_field2b)
-    print(cov_wksp.wsp.lmax, cov_wksp.wsp.lmax_mask)
-    wksp_a = get_workspace(wksp_dir, nmt_field1a, nmt_field2a, nmt_bins)
-    wksp_b = get_workspace(wksp_dir, nmt_field1b, nmt_field2b, nmt_bins)
-    print(wksp_a.wsp.lmax, wksp_a.wsp.lmax_mask)
-    print(wksp_b.wsp.lmax, wksp_b.wsp.lmax_mask)
+    cov_wksp = get_cov_workspace(nmt_field1a, nmt_field2a, nmt_field1b, nmt_field2b,
+                                 wksp_cache=wksp_dir)
+    wksp_a = get_workspace(nmt_field1a, nmt_field2a, nmt_bins, wksp_cache=wksp_dir)
+    wksp_b = get_workspace(nmt_field1b, nmt_field2b, nmt_bins, wksp_cache=wksp_dir)
 
     spins = [nmt_field1a.spin, nmt_field2a.spin, nmt_field1b.spin, nmt_field2b.spin]
-    print(spins)
 
     # iNKA approximation: get coupled cls divded by mean of product of masks
-    pcl1a1b = nmt.compute_coupled_cell(nmt_field1a, nmt_field1b) / fsky(nmt_field1a, nmt_field1b)
-    pcl2a1b = nmt.compute_coupled_cell(nmt_field2a, nmt_field1b) / fsky(nmt_field2a, nmt_field1b)
-    pcl1a2b = nmt.compute_coupled_cell(nmt_field1a, nmt_field2b) / fsky(nmt_field1a, nmt_field2b)
-    pcl2a2b = nmt.compute_coupled_cell(nmt_field2a, nmt_field2b) / fsky(nmt_field2a, nmt_field2b)
+    pcl1a1b = coupled_cl_over_fsky(nmt_field1a, nmt_field1b)
+    pcl2a1b = coupled_cl_over_fsky(nmt_field2a, nmt_field1b)
+    pcl1a2b = coupled_cl_over_fsky(nmt_field1a, nmt_field2b)
+    pcl2a2b = coupled_cl_over_fsky(nmt_field2a, nmt_field2b)
 
     if np.isnan(pcl1a1b).any(): print("pcl1a1b has nans")
     if np.isnan(pcl1a2b).any(): print("pcl1a2b has nans")
@@ -141,10 +144,15 @@ def compute_gaussian_cov(wksp_dir, nmt_field1a, nmt_field2a, nmt_field1b, nmt_fi
 
 def compute_cls_cov(tracers, xspectra_list, bins, subtract_noise=False, compute_cov=True,
                     compute_interbin_cov=True, wksp_cache=None):
-    """Calculate all cross-spectra and covariances from a list of tracers."""
+    """
+    Calculate all cross-spectra and covariances from a list of tracers.
+
+    Returns: ells, cls, bpws, [covs]
+    """
+    ells = dict()
     cls = dict()
-    wksps = dict()
     bpws = dict()
+    wksps = dict()  # not returned, but needed internally
     if not isinstance(bins, list):
         bins = len(xspectra_list) * [bins,]
     # loop over all cross-spectra
@@ -160,7 +168,8 @@ def compute_cls_cov(tracers, xspectra_list, bins, subtract_noise=False, compute_
                     continue
                 cl_key = f"{tracer1_key}_{i}, {tracer2_key}_{j}"
                 print("computing cross-spectrum", cl_key)
-                wksp = get_workspace(tracer1[i].field, tracer2[j].field, bins_, wksp_cache=wksp_cache)
+                wksp = get_workspace(tracer1[i].field, tracer2[j].field, bins_,
+                                     wksp_cache=wksp_cache)
                 pcl = nmt.compute_coupled_cell(tracer1[i].field, tracer2[j].field)
                 # only subtract noise from auto-spectra
                 if subtract_noise and i == j and tracer1 == tracer2:
@@ -173,13 +182,14 @@ def compute_cls_cov(tracers, xspectra_list, bins, subtract_noise=False, compute_
                         pcl[-1] -= tracer1[i].noise_est
                 cl = wksp.decouple_cell(pcl)
                 # save quantities
+                ells[cl_key] = bins_.get_effective_ells()
                 cls[cl_key] = cl
-                wksps[cl_key] = wksp
                 bpws[cl_key] = wksp.get_bandpower_windows()
+                wksps[cl_key] = wksp
 
     covs = dict()
     if not compute_cov:
-        return cls, bpws, covs
+        return ells, cls, bpws, covs
 
     # loop over all covariances
     cl_keys = list(cls.keys())
@@ -190,7 +200,8 @@ def compute_cls_cov(tracers, xspectra_list, bins, subtract_noise=False, compute_
         field_a2 = tracers[tracer_a2_key][bin_a2].field
 
         # skip covariances that involve a catalog field
-        if tracers[tracer_a1_key][bin_a1].is_cat_field or tracers[tracer_a2_key][bin_a2].is_cat_field:
+        if tracers[tracer_a1_key][bin_a1].is_cat_field or \
+           tracers[tracer_a2_key][bin_a2].is_cat_field:
             print("Skipping covariances involving catalog field (not implemented yet)")
             continue
 
@@ -207,24 +218,26 @@ def compute_cls_cov(tracers, xspectra_list, bins, subtract_noise=False, compute_
             field_b2 = tracers[tracer_b2_key][bin_b2].field
 
             # skip covariances that involve a catalog field
-            if tracers[tracer_b1_key][bin_b1].is_cat_field or tracers[tracer_b2_key][bin_b2].is_cat_field:
+            if tracers[tracer_b1_key][bin_b1].is_cat_field or \
+               tracers[tracer_b2_key][bin_b2].is_cat_field:
                 print("Skipping covariances involving catalog field (not implemented yet)")
                 continue
 
             cov_key = f"{cl_key_a}, {cl_key_b}"
             print("computing covariance", cov_key)
-            cov_wksp = get_cov_workspace(field_a1, field_a2, field_b1, field_b2, wksp_cache=wksp_cache)
+            cov_wksp = get_cov_workspace(field_a1, field_a2, field_b1, field_b2,
+                                         wksp_cache=wksp_cache)
             wksp_a = wksps[cl_key_a]
             wksp_b = wksps[cl_key_b]
             spins = [field_a1.spin, field_a2.spin, field_b1.spin, field_b2.spin]
-            pcl_a1b1 = nmt.compute_coupled_cell(field_a1, field_b1) / fsky(field_a1, field_b1)
-            pcl_a1b2 = nmt.compute_coupled_cell(field_a1, field_b2) / fsky(field_a1, field_b2)
-            pcl_a2b1 = nmt.compute_coupled_cell(field_a2, field_b1) / fsky(field_a2, field_b1)
-            pcl_a2b2 = nmt.compute_coupled_cell(field_a2, field_b2) / fsky(field_a2, field_b2)
+            pcl_a1b1 = coupled_cl_over_fsky(field_a1, field_b1)
+            pcl_a1b2 = coupled_cl_over_fsky(field_a1, field_b2)
+            pcl_a2b1 = coupled_cl_over_fsky(field_a2, field_b1)
+            pcl_a2b2 = coupled_cl_over_fsky(field_a2, field_b2)
 
-            cov = nmt.gaussian_covariance(cov_wksp, *spins, pcl_a1b1, pcl_a1b2, pcl_a2b1, pcl_a2b2,
-                                          wksp_a, wksp_b)
+            cov = nmt.gaussian_covariance(cov_wksp, *spins, pcl_a1b1, pcl_a1b2,
+                                          pcl_a2b1, pcl_a2b2, wksp_a, wksp_b)
             if np.isnan(cov).any(): print("cov has nans")
             covs[cov_key] = cov
 
-    return cls, bpws, covs
+    return ells, cls, bpws, covs
