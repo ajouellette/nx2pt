@@ -109,6 +109,8 @@ def get_tracer(nside, tracer_config):
                 raise ValueError(f"Must specify either fields or randoms in {tracer_key}")
             tracer = CatalogTracer(bin_name, pos, weights, 3*nside-1, fields=fields, beam=beam,
                                    pos_rand=pos_rand, weights_rand=weights_rand)
+        else:
+            raise ValueError("Tracer must be either a healpix field or a catalog")
 
         tracer_bins.append(tracer)
     return tracer_bins
@@ -121,8 +123,10 @@ def parse_cross_spectra(config):
 def main():
     parser = argparse.ArgumentParser(description="Run a Nx2-point analysis pipeline")
     parser.add_argument("config_file", help="YAML file specifying pipeline to run")
-    parser.add_argument("--nside", help="overrides nside in config file", type=int, default=None)
-    parser.add_argument("--no-cache", action="store_true", help="Don't use the workspace cache")
+    parser.add_argument("--nside", type=int, default=None,
+                        help="overrides nside in config file")
+    parser.add_argument("--no-cache", action="store_true",
+                        help="Don't use the workspace cache")
     args = parser.parse_args()
     print(args)
 
@@ -130,13 +134,12 @@ def main():
         config = yaml.full_load(f)
 
     print(config)
-    nside = config["nside"] if args.nside is None else args.nside
+    nside = args.nside if args.nside is not None else config["nside"]
     print("Nside", nside)
 
-    nmt_bins = get_ell_bins(nside, config["binning"])
-    ell_eff = nmt_bins.get_effective_ells()
+    nmt_bins_default = get_ell_bins(nside, config["binning"])
 
-    tracer_keys = [key for key in config["tracers"].keys()]
+    tracer_keys = list(config["tracers"].keys())
     print(f"Found {len(tracer_keys)} tracers")
     tracers = dict()
     for tracer_key in tracer_keys:
@@ -147,14 +150,17 @@ def main():
     xspec_keys = [key for key in config.keys() if key.startswith("cross_spectra")]
     print(f"Found {len(xspec_keys)} set(s) of cross-spectra to calculate")
     for xspec_key in xspec_keys:
-        if "save_npz" not in config[xspec_key].keys() and "save_sacc" not in config[xspec_key].keys():
+        if "save_npz" not in config[xspec_key].keys() and \
+           "save_sacc" not in config[xspec_key].keys():
             print(f"Warning! No output will be saved for the block {xspec_key}")
 
     wksp_dir = None if args.no_cache else config["workspace_dir"]
     print("Using workspace cache:", wksp_dir)
 
     for xspec_key in xspec_keys:
-        xspec_list = config[xspec_key]["list"]
+        xspec_list = [x["tracers"] for x in config[xspec_key]["list"]]
+        bin_list = [nmt_bins_default if "binning" not in x else 
+                    get_ell_bins(nside, x["binning"]) for x in config[xspec_key]["list"]]
         print("Computing set", xspec_list)
 
         calc_cov = config[xspec_key].get("covariance", False)
@@ -162,17 +168,20 @@ def main():
         subtract_noise = config[xspec_key].get("subtract_noise", False)
 
         # calculate everything
-        cls, bpws, covs = compute_cls_cov(tracers, xspec_list, nmt_bins, subtract_noise=subtract_noise,
-                                          compute_cov=calc_cov, compute_interbin_cov=calc_interbin_cov,
-                                          wksp_cache=wksp_dir)
+        ells, cls, bpws, covs = compute_cls_cov(tracers, xspec_list, bin_list,
+                                                subtract_noise=subtract_noise,
+                                                compute_cov=calc_cov, 
+                                                compute_interbin_cov=calc_interbin_cov,
+                                                wksp_cache=wksp_dir)
 
-        data = Data(ell_eff, cls, covs, bpws, tracers=tracers)
+        data = ClData(ells, cls, covs, bpws, tracers=tracers)
 
-        # save all cross-spectra
-        if "save_npz" in config[xspec_key].keys():
-            save_npz_file = config[xspec_key]["save_npz"].format(nside=nside)
-            print("Saving to", save_npz_file)
-            data.write_to_npz(save_npz_file)
+        # TODO: should probably get rid of saving to npz files
+        ## save all cross-spectra
+        #if "save_npz" in config[xspec_key].keys():
+        #    save_npz_file = config[xspec_key]["save_npz"].format(nside=nside)
+        #    print("Saving to", save_npz_file)
+        #    data.write_to_npz(save_npz_file)
 
         # create sacc file
         if "save_sacc" in config[xspec_key].keys():

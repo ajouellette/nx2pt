@@ -25,19 +25,19 @@ def get_cl_dtypes(ncls):
     raise ValueError("ncls must be 1, 2, or 4")
 
 
-class Data:
+class ClData:
 
-    def __init__(self, ell_eff, cls, covs, bpws, tracers=None):
-        self.ell_eff = ell_eff
+    def __init__(self, ells, cls, covs, bpws, tracers=None):
+        self.ells = ells
         self.cls = cls
         self.covs = covs
         self.bpws = bpws
-        self.nbpws = len(ell_eff)
         if tracers is not None:
             self.tracer_info = dict()
             for key, tracer_bins in tracers.items():
                 for i, tracer_bin in enumerate(tracer_bins):
-                    self.tracer_info[f"{key}_{i}"] = dict(description=tracer_bin.name, spin=tracer_bin.spin)
+                    tracer_info = dict(description=tracer_bin.name, spin=tracer_bin.spin)
+                    self.tracer_info[f"{key}_{i}"] = tracer_info
         else:
             self.tracer_info = None
 
@@ -119,10 +119,11 @@ class Data:
             return cov
         if dtype2 is None:
             dtype2 = dtype1
-        ncls = np.array(cov.shape) // self.nbpws
+        ncls = [len(self.cls[cl1]), len(self.cls[cl2])]
+        nbpws = [len(self.ells[cl1]), len(self.ells[cl2])]
         ind1 = get_cl_dtypes(ncls[0]).index(dtype1)
         ind2 = get_cl_dtypes(ncls[1]).index(dtype2)
-        cov_shape = (self.nbpws, ncls[0], self.nbpws, ncls[1])
+        cov_shape = (nbpws[0], ncls[0], nbpws[1], ncls[1])
         return cov.reshape(cov_shape)[:,ind1,:,ind2]
 
     def build_full_cov_e(self, cls, scale_cuts=None, fill_off_diag=True):
@@ -171,6 +172,7 @@ class Data:
         # data
         for tracer1, tracer2 in self.tracer_pairs:
             cl_key = f"{tracer1}, {tracer2}"
+            ells = self.ells[cl_key]
             cl = self.cls[cl_key]
             if self.bpws == {}:
                 warnings.warn("Data has no bandpower information")
@@ -181,7 +183,7 @@ class Data:
                 bpws = [sacc.BandpowerWindow(ell, nmt_bpws[i,:,i,:].T) for i in range(len(cl))]
             # possible spin combinations
             for i, dtype in enumerate(get_cl_dtypes(len(cl))):
-                s.add_ell_cl(dtype, tracer1, tracer2, self.ell_eff, cl[i], window=bpws[i])
+                s.add_ell_cl(dtype, tracer1, tracer2, ells, cl[i], window=bpws[i])
         # covariance
         if self.covs == {}:
             warnings.warn("Data has no covariance information")
