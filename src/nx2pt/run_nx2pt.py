@@ -10,7 +10,7 @@ import joblib
 import sacc
 from astropy.table import Table
 
-from .data import Data
+from .data import ClData
 from .tracer import MapTracer, CatalogTracer
 from .namaster_tools import get_bpw_edges, get_nmtbins
 from .namaster_tools import compute_cls_cov

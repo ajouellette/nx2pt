@@ -111,7 +111,7 @@ def fsky(nmt_field1, nmt_field2):
 
 
 def coupled_cl_over_fsky(nmt_field1, nmt_field2):
-    return nmt.compute_coupled_cl(nmt_field1, nmt_field2) / fsky(nmt_field1, nmt_field2)
+    return nmt.compute_coupled_cell(nmt_field1, nmt_field2) / fsky(nmt_field1, nmt_field2)
 
 
 def compute_gaussian_cov(wksp_dir, nmt_field1a, nmt_field2a, nmt_field1b, nmt_field2b,
