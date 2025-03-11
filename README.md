@@ -43,13 +43,16 @@ tracers:
 cross_spectra:
   # calculate all auto- and cross-spectra
   list:
-    - [gal1, gal2]
-    - [gal1, gal1]
-    - [gal2, gal2]
+    - tracers: [gal1, gal2]
+    - tracers: [gal1, gal1]
+    - tracers: [gal2, gal2]
   # calculate full covariance
   covariance: True
-  # save everything to a .npz file
-  save_npz: "galaxy_3x2pt_spectra.npz"
+  # save everything to a sacc file
+  save_sacc: 
+    metadata:
+        description: "Example galaxy cross-spectra"
+    file: "galaxy_3x2pt_spectra.fits"
 ```
 
 It is very easy to setup significantly more complicated pipelines with arbitrary number of tracers (each possibly with tomographic bins and/or spin). More pipeline examples are given in `examples`.
