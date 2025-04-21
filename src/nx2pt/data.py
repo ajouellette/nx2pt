@@ -2,12 +2,37 @@ import datetime
 import os
 import warnings
 import numpy as np
+from scipy import interpolate
 import sacc
 
 
-def bin_theory_cl(theory_cl, bpws):
+class ClInterpolator(interpolate.CubicSpline):
+    """Interpolate power spectra in log-log space."""
+
+    def __init__(self, ell, cl, axis=0, log_ell=True, log_cl=True):
+        self.log_ell = log_ell
+        self.log_cl = log_cl
+        x = ell if not log_ell else np.log(ell)
+        y = cl if not log_cl else np.log(cl)
+        super().__init__(x, y, axis=axis)
+
+    def __call__(self, ell):
+        x = ell if not self.log_ell else np.log(ell)
+        y = super().__call__(x)
+        if self.log_cl:
+            return np.exp(y)
+        return y
+
+
+def bin_theory_cl(theory_cl, bpws, ell=None, fix_dipole=True):
     """Bin a theory Cl given some bandpower windows."""
     nells = bpws.shape[1]
+    if ell is not None:
+        interp = ClInterpolator(ell, theory_cl)
+        if fix_dipole:
+            theory_cl = np.hstack([[0, 0], interp(np.arange(2, nells))])
+        else:
+            theory_cl = np.hstack([[0,], interp(np.arange(1, nells))])
     if len(theory_cl) < nells:
         raise ValueError("theory Cl has fewer ells than the bandpower windows.")
     wsum = np.sum(bpws, axis=1)
