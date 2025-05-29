@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from functools import cached_property
 import numpy as np
 import healpy as hp
 import pymaster as nmt
@@ -57,8 +58,11 @@ class MapTracer(Tracer):
             self.spin = 2
         else:
             raise ValueError("Only spin-0 or spin-2 supported")
+
+    @cached_property
+    def field(self):
         # namaster field
-        self.field = nmt.NmtField(self.mask, self.maps, spin=self.spin, beam=self.beam, masked_on_input=self.masked_on_input)
+        return nmt.NmtField(self.mask, self.maps, spin=self.spin, beam=self.beam, masked_on_input=self.masked_on_input)
 
 
 @dataclass
@@ -115,10 +119,15 @@ class CatalogTracer(Tracer):
             if self.beam is None:
                 self.beam = np.ones(self.lmax+1)
             assert len(self.beam) >= self.lmax+1, "beam is incorrect size for given lmax"
-            # namaster field
-            self.field = nmt.NmtFieldCatalog(self.pos, self.weights, self.fields, self.lmax, spin=self.spin, beam=self.beam,
-                                             field_is_weighted=self.field_is_weighted, lonlat=self.lonlat)
         else:
             # create a NmtFieldCatalogClustering object
             self.spin = 0
-            self.field = nmt.NmtFieldCatalogClustering(self.pos, self.weights, self.pos_rand, self.weights_rand, self.lmax, lonlat=self.lonlat)
+
+    @cached_property
+    def field(self):
+        if self.fields is not None:
+            # Field sampled at catalog locations
+            return nmt.NmtFieldCatalog(self.pos, self.weights, self.fields, self.lmax, spin=self.spin, beam=self.beam,
+                                       field_is_weighted=self.field_is_weighted, lonlat=self.lonlat)
+        # clustering of catalog
+        return nmt.NmtFieldCatalogClustering(self.pos, self.weights, self.pos_rand, self.weights_rand, self.lmax, lonlat=self.lonlat)
