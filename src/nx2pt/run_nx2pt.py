@@ -15,6 +15,7 @@ from .tracer import MapTracer, CatalogTracer
 from .namaster_tools import get_bpw_edges, get_nmtbins
 from .namaster_tools import compute_cls_cov
 from .utils import get_ul_key, parse_cl_key, parse_tracer_bin
+from .utils import Timer, preprocess_yaml
 
 
 def get_ell_bins(nside, bin_config):
@@ -60,7 +61,9 @@ def get_tracer(nside, tracer_config):
         if "beam" in tracer_config.keys():
             if tracer_config["beam"] == "pixwin":
                 beam = hp.pixwin(nside)
-            #beam_file = data_dir + '/' + config[key]["beam"].format(bin=bin_i, nside=nside)
+            else:
+                beam_file = path.join(data_dir, config[key]["beam"].format(bin=bin_i, nside=nside))
+                beam = np.loadtxt(beam_file)
         else:
             beam = np.ones(3*nside)
 
@@ -107,6 +110,7 @@ def get_tracer(nside, tracer_config):
                     weights_rand = np.ones(len(rand_cat))
             else:
                 raise ValueError(f"Must specify either fields or randoms in {tracer_key}")
+
             tracer = CatalogTracer(bin_name, pos, weights, 3*nside-1, fields=fields, beam=beam,
                                    pos_rand=pos_rand, weights_rand=weights_rand)
         else:
@@ -128,12 +132,10 @@ def main():
     parser.add_argument("--no-cache", action="store_true",
                         help="Don't use the workspace cache")
     args = parser.parse_args()
-    print(args)
 
-    with open(args.config_file) as f:
-        config = yaml.full_load(f)
+    config = preprocess_yaml(args.config_file)
+    config = yaml.safe_load(config)
 
-    print(config)
     nside = args.nside if args.nside is not None else config["nside"]
     print("Nside", nside)
 
