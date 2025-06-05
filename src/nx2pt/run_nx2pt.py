@@ -75,15 +75,9 @@ def get_tracer(nside, tracer_config):
             maps = np.atleast_2d(hp.read_map(map_file, field=None))
             if correct_qu_sign and len(maps) == 2:
                 maps = np.array([-maps[0], maps[1]])
-
             mask = hp.read_map(mask_file)
             if use_mask_squared: mask = mask**2
-
             tracer = MapTracer(bin_name, maps, mask, beam=beam, masked_on_input=is_masked)
-            noise_est = tracer_config["healpix"].get("noise_est", 0)
-            if not isinstance(noise_est, list):
-                noise_est = bins * [noise_est,]
-            tracer.noise_est = noise_est[ind]
 
         elif tracer_type == "catalog":
             cat_file = path.join(data_dir, tracer_config["catalog"]["file"].format(bin=bin_i))
@@ -115,6 +109,13 @@ def get_tracer(nside, tracer_config):
                                    pos_rand=pos_rand, weights_rand=weights_rand)
         else:
             raise ValueError("Tracer must be either a healpix field or a catalog")
+
+        # shot noise
+        if "noise_est" in tracer_config.keys():
+            noise_est = tracer_config["noise_est"]
+            if not isinstance(noise_est, list):
+                noise_est = bins * [noise_est,]
+            tracer.noise_est = noise_est[ind]
 
         tracer_bins.append(tracer)
     return tracer_bins
