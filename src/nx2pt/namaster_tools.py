@@ -6,6 +6,7 @@ import pymaster as nmt
 import joblib
 
 from .utils import parse_tracer_bin, parse_cl_key
+from .utils import Timer
 
 
 def get_bpw_edges(lmin, lmax, nbpws, kind):
@@ -38,21 +39,24 @@ def get_workspace(nmt_field1, nmt_field2, nmt_bins, wksp_cache=None):
 
     # hash on mask alms (to support catalog fields) and spins
     # TODO: this operation is not symmetric wrt field1/field2
-    hash_key = joblib.hash([nmt_field1.get_mask_alms(), nmt_field1.spin,
-                            nmt_field2.get_mask_alms(), nmt_field2.spin])
+    with Timer("hashing.."):
+        hash_key = joblib.hash([nmt_field1.get_mask_alms(), nmt_field1.spin,
+                                nmt_field2.get_mask_alms(), nmt_field2.spin])
     wksp_file = path.join(wksp_cache, f"cl/{hash_key}.fits")
 
     if path.isfile(wksp_file):
         # load from existing file
-        wksp = nmt.NmtWorkspace.from_file(wksp_file)
-        wksp.check_unbinned()
-        print("Using cached workspace")
+        with Timer("loading from file..."):
+            wksp = nmt.NmtWorkspace.from_file(wksp_file)
+            wksp.check_unbinned()
         # update bins and beams after loading
-        wksp.update_beams(nmt_field1.beam, nmt_field2.beam)
-        wksp.update_bins(nmt_bins)
+        with Timer("updating beams and bins..."):
+            wksp.update_beams(nmt_field1.beam, nmt_field2.beam)
+            wksp.update_bins(nmt_bins)
     else:
         # compute and save to file
-        wksp = nmt.NmtWorkspace.from_fields(nmt_field1, nmt_field2, nmt_bins)
+        with Timer("computing..."):
+            wksp = nmt.NmtWorkspace.from_fields(nmt_field1, nmt_field2, nmt_bins)
         os.makedirs(path.dirname(wksp_file), exist_ok=True)
         wksp.write_to(wksp_file)
 
@@ -153,6 +157,7 @@ def compute_cls_cov(tracers, xspectra_list, bins, subtract_noise=False, compute_
     cls = dict()
     bpws = dict()
     wksps = dict()  # not returned, but needed internally
+
     if not isinstance(bins, list):
         bins = len(xspectra_list) * [bins,]
     # loop over all cross-spectra
@@ -167,25 +172,31 @@ def compute_cls_cov(tracers, xspectra_list, bins, subtract_noise=False, compute_
                 if tracer1 == tracer2 and j < i:
                     continue
                 cl_key = f"{tracer1_key}_{i}, {tracer2_key}_{j}"
-                print("computing cross-spectrum", cl_key)
-                wksp = get_workspace(tracer1[i].field, tracer2[j].field, bins_,
-                                     wksp_cache=wksp_cache)
-                pcl = nmt.compute_coupled_cell(tracer1[i].field, tracer2[j].field)
-                # only subtract noise from auto-spectra
-                if subtract_noise and i == j and tracer1 == tracer2:
-                    print(f"subtracting noise estimate: {tracer1[i].noise_est:.4e}")
-                    # only subtract from EE, BB if spin-2
-                    if tracer1[i].spin == 0:
-                        pcl -= tracer1[i].noise_est
-                    else:
-                        pcl[0] -= tracer1[i].noise_est
-                        pcl[-1] -= tracer1[i].noise_est
-                cl = wksp.decouple_cell(pcl)
-                # save quantities
-                ells[cl_key] = bins_.get_effective_ells()
-                cls[cl_key] = cl
-                bpws[cl_key] = wksp.get_bandpower_windows()
-                wksps[cl_key] = wksp
+                with Timer(f"computing cross-spectrum {cl_key}..."):
+                    with Timer("getting workspace..."):
+                        wksp = get_workspace(tracer1[i].field, tracer2[j].field, bins_,
+                                            wksp_cache=wksp_cache)
+                    # save pcls and wksps for covariance calculation
+                    with Timer("computing pcl..."):
+                        pcl = nmt.compute_coupled_cell(tracer1[i].field, tracer2[j].field)
+                    wksps[cl_key] = wksp
+                    # only subtract noise from auto-spectra
+                    if subtract_noise and i == j and tracer1 == tracer2:
+                        if not hasattr(tracer1[i], "noise_est"):
+                            print("tracer has no shot noise estimate")
+                        else:
+                            print(f"subtracting noise estimate: {tracer1[i].noise_est:.4e}")
+                            # only subtract from EE, BB if spin-2
+                            if tracer1[i].spin == 0:
+                                pcl -= tracer1[i].noise_est
+                            else:
+                                pcl[0] -= tracer1[i].noise_est
+                                pcl[-1] -= tracer1[i].noise_est
+                    cl = wksp.decouple_cell(pcl)
+                    # save quantities
+                    ells[cl_key] = bins_.get_effective_ells()
+                    cls[cl_key] = cl
+                    bpws[cl_key] = wksp.get_bandpower_windows()
 
     covs = dict()
     if not compute_cov:
