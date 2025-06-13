@@ -18,7 +18,7 @@ class Timer:
     def __exit__(self, *args):
         self.t2 = time.perf_counter()
         dt = timedelta(seconds=self.t2 - self.t1)
-        print(f"  took {dt}")
+        print(f"{self.description}  Done in {dt}")
 
 
 def preprocess_yaml(filename):
