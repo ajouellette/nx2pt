@@ -12,28 +12,10 @@ from astropy.table import Table
 
 from .data import ClData
 from .tracer import MapTracer, CatalogTracer
-from .namaster_tools import get_bpw_edges, get_nmtbins
+from .namaster_tools import get_ell_bins
 from .namaster_tools import compute_cls_cov
 from .utils import get_ul_key, parse_cl_key, parse_tracer_bin
 from .utils import Timer, preprocess_yaml
-
-
-def get_ell_bins(nside, bin_config):
-    """Generate ell bins from config."""
-    bpw_edges = bin_config.get("bpw_edges", None)
-    if bpw_edges is None:
-        kind = bin_config.get("kind", "linear")
-        lmin = bin_config.get("ell_min", 2)
-        lmax = bin_config.get("ell_max", 3*nside-1)
-        nbpws = bin_config.get("nbpws", None)
-        if nbpws is None and kind == "linear":
-            delta_ell = bin_config["delta_ell"]
-            nbpws = (lmax - lmin) // delta_ell
-        elif nbpws is None:
-            raise ValueError("Must specify nbpws for non-linear binning")
-        bpw_edges = get_bpw_edges(lmin, lmax, nbpws, kind)
-    nmt_bin = get_nmtbins(nside, bpw_edges)
-    return nmt_bin
 
 
 def get_tracer(nside, tracer_config):
@@ -121,10 +103,6 @@ def get_tracer(nside, tracer_config):
     return tracer_bins
 
 
-def parse_cross_spectra(config):
-    pass
-
-
 def main():
     parser = argparse.ArgumentParser(description="Run a Nx2-point analysis pipeline")
     parser.add_argument("config_file", help="YAML file specifying pipeline to run")
@@ -143,7 +121,7 @@ def main():
     nmt_bins_default = get_ell_bins(nside, config["binning"])
 
     tracer_keys = list(config["tracers"].keys())
-    print(f"Found {len(tracer_keys)} tracers")
+    print(f"Found {len(tracer_keys)} tracer(s)")
     tracers = dict()
     for tracer_key in tracer_keys:
         tracer_bins = get_tracer(nside, config["tracers"][tracer_key])
@@ -161,19 +139,26 @@ def main():
     print("Using workspace cache:", wksp_dir)
 
     for xspec_key in xspec_keys:
-        xspec_list = [x["tracers"] for x in config[xspec_key]["list"]]
-        bin_list = [nmt_bins_default if "binning" not in x else 
-                    get_ell_bins(nside, x["binning"]) for x in config[xspec_key]["list"]]
-        print("Computing set", xspec_list)
+        # cross-spectra with their individual settings
+        xspectra = config[xspec_key]["list"]
 
+        print("Computing set", xspec_key)
+        print("Tracers:", [x["tracers"] for x in xspectra])
+
+        # apply default binning
+        for xspec in xspectra:
+            if "binning" not in xspec.keys():
+                if "binning" in config.keys():
+                    xspec["binning"] = config["binning"]
+                else:
+                    raise ValueError("Must specify a binning scheme: either a global default, or individually for each cross-spectrum.")
+
+        # covariance of cross-spectra
         calc_cov = config[xspec_key].get("covariance", False)
         calc_interbin_cov = config[xspec_key].get("interbin_cov", False)
-        subtract_noise = config[xspec_key].get("subtract_noise", False)
 
         # calculate everything
-        ells, cls, bpws, covs = compute_cls_cov(tracers, xspec_list, bin_list,
-                                                subtract_noise=subtract_noise,
-                                                compute_cov=calc_cov, 
+        ells, cls, bpws, covs = compute_cls_cov(tracers, xspectra, compute_cov=calc_cov,
                                                 compute_interbin_cov=calc_interbin_cov,
                                                 wksp_cache=wksp_dir)
 

@@ -9,6 +9,24 @@ from .utils import parse_tracer_bin, parse_cl_key
 from .utils import Timer
 
 
+def get_ell_bins(nside, bin_config):
+    """Generate ell bins from config."""
+    bpw_edges = bin_config.get("bpw_edges", None)
+    if bpw_edges is None:
+        kind = bin_config.get("kind", "linear")
+        lmin = bin_config.get("ell_min", 2)
+        lmax = bin_config.get("ell_max", 3*nside-1)
+        nbpws = bin_config.get("nbpws", None)
+        if nbpws is None and kind == "linear":
+            delta_ell = bin_config["delta_ell"]
+            nbpws = (lmax - lmin) // delta_ell
+        elif nbpws is None:
+            raise ValueError("Must specify nbpws for non-linear binning")
+        bpw_edges = get_bpw_edges(lmin, lmax, nbpws, kind)
+    nmt_bin = get_nmtbins(nside, bpw_edges)
+    return nmt_bin
+
+
 def get_bpw_edges(lmin, lmax, nbpws, kind):
     """Generate bandpower edges."""
     if kind == "linear":
@@ -146,10 +164,14 @@ def compute_gaussian_cov(wksp_dir, nmt_field1a, nmt_field2a, nmt_field1b, nmt_fi
     return cov
 
 
-def compute_cls_cov(tracers, xspectra_list, bins, subtract_noise=False, compute_cov=True,
-                    compute_interbin_cov=True, wksp_cache=None):
+def compute_cls_cov(tracers, xspectra, compute_cov=True, compute_interbin_cov=True,
+                    wksp_cache=None):
     """
     Calculate all cross-spectra and covariances from a list of tracers.
+
+    Parameters:
+    tracers: dict(key: Tracer) - dictionary of tracer ID, tracer pairs
+    xspectra: list(dict(tracers: tracer_pair, **settings)) - list of cross-spectra to compute
 
     Returns: ells, cls, bpws, [covs]
     """
@@ -157,24 +179,32 @@ def compute_cls_cov(tracers, xspectra_list, bins, subtract_noise=False, compute_
     cls = dict()
     bpws = dict()
     wksps = dict()  # not returned, but needed internally
+    nls = dict()
 
-    if not isinstance(bins, list):
-        bins = len(xspectra_list) * [bins,]
     # loop over all cross-spectra
-    for xspec, bins_ in zip(xspectra_list, bins):
-        tracer1_key, tracer2_key = xspec
+    for xspec in xspectra:
+        # get tracers and cross-spectrum specific settings
+        tracer1_key, tracer2_key = xspec["tracers"]
         tracer1 = tracers[tracer1_key]
         tracer2 = tracers[tracer2_key]
+        subtract_noise = xspec.get("subtract_noise", False)
+        autos_only = xspec.get("autos_only", False)
+        save_nl = xspec.get("save_nl", False)
+        # get binning
+        bins = get_ell_bins(tracer1[0].nside, xspec["binning"])
+
         # loop over all bins
         for i in range(len(tracer1)):
             for j in range(len(tracer2)):
                 # skip duplicates
                 if tracer1 == tracer2 and j < i:
                     continue
+                if tracer1 == tracer2 and autos_only and i != j:
+                    continue
                 cl_key = f"{tracer1_key}_{i}, {tracer2_key}_{j}"
                 with Timer(f"computing cross-spectrum {cl_key}..."):
                     with Timer("getting workspace..."):
-                        wksp = get_workspace(tracer1[i].field, tracer2[j].field, bins_,
+                        wksp = get_workspace(tracer1[i].field, tracer2[j].field, bins,
                                             wksp_cache=wksp_cache)
                     # save pcls and wksps for covariance calculation
                     with Timer("computing pcl..."):
@@ -194,7 +224,7 @@ def compute_cls_cov(tracers, xspectra_list, bins, subtract_noise=False, compute_
                                 pcl[-1] -= tracer1[i].noise_est
                     cl = wksp.decouple_cell(pcl)
                     # save quantities
-                    ells[cl_key] = bins_.get_effective_ells()
+                    ells[cl_key] = bins.get_effective_ells()
                     cls[cl_key] = cl
                     bpws[cl_key] = wksp.get_bandpower_windows()
 
