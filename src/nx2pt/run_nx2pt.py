@@ -6,13 +6,11 @@ import yaml
 import numpy as np
 import healpy as hp
 import pymaster as nmt
-import joblib
 import sacc
 from astropy.table import Table
 
 from .data import ClData
 from .tracer import MapTracer, CatalogTracer
-from .namaster_tools import get_ell_bins
 from .namaster_tools import compute_cls_cov
 from .utils import get_ul_key, parse_cl_key, parse_tracer_bin
 from .utils import Timer, preprocess_yaml
@@ -118,7 +116,8 @@ def main():
     nside = args.nside if args.nside is not None else config["nside"]
     print("Nside", nside)
 
-    nmt_bins_default = get_ell_bins(nside, config["binning"])
+    wksp_dir = None if args.no_cache else config["workspace_dir"]
+    print("Using workspace cache:", wksp_dir)
 
     tracer_keys = list(config["tracers"].keys())
     print(f"Found {len(tracer_keys)} tracer(s)")
@@ -134,9 +133,6 @@ def main():
         if "save_npz" not in config[xspec_key].keys() and \
            "save_sacc" not in config[xspec_key].keys():
             print(f"Warning! No output will be saved for the block {xspec_key}")
-
-    wksp_dir = None if args.no_cache else config["workspace_dir"]
-    print("Using workspace cache:", wksp_dir)
 
     for xspec_key in xspec_keys:
         # cross-spectra with their individual settings
