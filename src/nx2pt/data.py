@@ -1,5 +1,6 @@
 import datetime
 import os
+from os import path
 import warnings
 import numpy as np
 from scipy import interpolate
@@ -9,7 +10,7 @@ import sacc
 class ClInterpolator(interpolate.CubicSpline):
     """Interpolate power spectra in log-log space."""
 
-    def __init__(self, ell, cl, axis=0, log_ell=True, log_cl=True):
+    def __init__(self, ell, cl, axis=0, log_ell=True, log_cl=False):
         self.log_ell = log_ell
         self.log_cl = log_cl
         x = ell if not log_ell else np.log(ell)
@@ -24,17 +25,22 @@ class ClInterpolator(interpolate.CubicSpline):
         return y
 
 
-def bin_theory_cl(theory_cl, bpws, ell=None, fix_dipole=True):
+def bin_theory_cl(theory_cl, bpws, ell=None, fix_dipole=True, fix_monopole=True, fill=False):
     """Bin a theory Cl given some bandpower windows."""
     nells = bpws.shape[1]
     if ell is not None:
         interp = ClInterpolator(ell, theory_cl)
         if fix_dipole:
             theory_cl = np.hstack([[0, 0], interp(np.arange(2, nells))])
-        else:
+        elif fix_monopole:
             theory_cl = np.hstack([[0,], interp(np.arange(1, nells))])
+        else:
+            theory_cl = interp(np.arange(nells))
     if len(theory_cl) < nells:
-        raise ValueError("theory Cl has fewer ells than the bandpower windows.")
+        if fill:
+            theory_cl = np.hstack([theory_cl, np.zeros(nells - len(theory_cl))])
+        else:
+            raise ValueError("theory Cl has fewer ells than the bandpower windows.")
     wsum = np.sum(bpws, axis=1)
     return np.sum(np.expand_dims(theory_cl[:nells], 0) * bpws, axis=1) / wsum
 
@@ -52,11 +58,12 @@ def get_cl_dtypes(ncls):
 
 class ClData:
 
-    def __init__(self, ells, cls, covs, bpws, tracers=None):
+    def __init__(self, ells, cls, bpws={}, covs={}, nls={}, tracers=None):
         self.ells = ells
         self.cls = cls
-        self.covs = covs
         self.bpws = bpws
+        self.covs = covs
+        self.nls = nls
         if tracers is not None:
             self.tracer_info = dict()
             for key, tracer_bins in tracers.items():
@@ -209,6 +216,14 @@ class ClData:
             # possible spin combinations
             for i, dtype in enumerate(get_cl_dtypes(len(cl))):
                 s.add_ell_cl(dtype, tracer1, tracer2, ells, cl[i], window=bpws[i])
+        # save noise templates as tags on the corresponding cls
+        if self.nls != {}:
+            for cl_key, nl in self.nls.items():
+                tracers = cl_key.split(", ")
+                for i, dtype in enumerate(get_cl_dtypes(len(nl))):
+                    inds = s.indices(data_type=dtype, tracers=tracers)
+                    for nl_i, ind in enumerate(inds):
+                        s.data[ind].tags["nl"] = nl[i][nl_i]
         # covariance
         if self.covs == {}:
             warnings.warn("Data has no covariance information")
@@ -229,4 +244,6 @@ class ClData:
                                 full_cov[np.ix_(inds1, inds2)] = cov
                 s.add_covariance(full_cov)
         # write
+        if path.dirname(filename):
+            os.makedirs(path.dirname(filename), exist_ok=True)
         s.save_fits(filename, overwrite=overwrite)

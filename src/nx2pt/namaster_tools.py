@@ -175,11 +175,8 @@ def compute_cls_cov(tracers, xspectra, compute_cov=True, compute_interbin_cov=Tr
 
     Returns: ells, cls, bpws, [covs]
     """
-    ells = dict()
-    cls = dict()
-    bpws = dict()
+    result = dict(ells={}, cls={}, bpws={}, covs={}, nls={})
     wksps = dict()  # not returned, but needed internally
-    nls = dict()
 
     # loop over all cross-spectra
     for xspec in xspectra:
@@ -199,6 +196,7 @@ def compute_cls_cov(tracers, xspectra, compute_cov=True, compute_interbin_cov=Tr
                 # skip duplicates
                 if tracer1 == tracer2 and j < i:
                     continue
+                # skip crosses if only doing autos
                 if tracer1 == tracer2 and autos_only and i != j:
                     continue
                 cl_key = f"{tracer1_key}_{i}, {tracer2_key}_{j}"
@@ -223,17 +221,23 @@ def compute_cls_cov(tracers, xspectra, compute_cov=True, compute_interbin_cov=Tr
                                 pcl[0] -= tracer1[i].noise_est
                                 pcl[-1] -= tracer1[i].noise_est
                     cl = wksp.decouple_cell(pcl)
+                    if save_nl:
+                        # save nl templates (decoupled unit amplitude)
+                        nl = np.zeros_like(pcl)
+                        nl[0] = 1
+                        nl[-1] = 1
+                        nl = wksp.decouple_cell(nl)
+                        result["nls"][cl_key] = nl
                     # save quantities
-                    ells[cl_key] = bins.get_effective_ells()
-                    cls[cl_key] = cl
-                    bpws[cl_key] = wksp.get_bandpower_windows()
+                    result["ells"][cl_key] = bins.get_effective_ells()
+                    result["cls"][cl_key] = cl
+                    result["bpws"][cl_key] = wksp.get_bandpower_windows()
 
-    covs = dict()
     if not compute_cov:
-        return ells, cls, bpws, covs
+        return result
 
     # loop over all covariances
-    cl_keys = list(cls.keys())
+    cl_keys = list(result["cls"].keys())
     for i in range(len(cl_keys)):
         cl_key_a = cl_keys[i]
         (tracer_a1_key, bin_a1), (tracer_a2_key, bin_a2) = parse_cl_key(cl_key_a)
@@ -279,6 +283,6 @@ def compute_cls_cov(tracers, xspectra, compute_cov=True, compute_interbin_cov=Tr
             cov = nmt.gaussian_covariance(cov_wksp, *spins, pcl_a1b1, pcl_a1b2,
                                           pcl_a2b1, pcl_a2b2, wksp_a, wksp_b)
             if np.isnan(cov).any(): print("cov has nans")
-            covs[cov_key] = cov
+            result["covs"][cov_key] = cov
 
-    return ells, cls, bpws, covs
+    return result

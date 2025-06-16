@@ -116,7 +116,7 @@ def main():
     nside = args.nside if args.nside is not None else config["nside"]
     print("Nside", nside)
 
-    wksp_dir = None if args.no_cache else config["workspace_dir"]
+    wksp_dir = None if args.no_cache else config.get("workspace_dir", None)
     print("Using workspace cache:", wksp_dir)
 
     tracer_keys = list(config["tracers"].keys())
@@ -154,11 +154,10 @@ def main():
         calc_interbin_cov = config[xspec_key].get("interbin_cov", False)
 
         # calculate everything
-        ells, cls, bpws, covs = compute_cls_cov(tracers, xspectra, compute_cov=calc_cov,
-                                                compute_interbin_cov=calc_interbin_cov,
-                                                wksp_cache=wksp_dir)
+        result = compute_cls_cov(tracers, xspectra, compute_cov=calc_cov,
+                                 compute_interbin_cov=calc_interbin_cov, wksp_cache=wksp_dir)
 
-        data = ClData(ells, cls, covs, bpws, tracers=tracers)
+        data = ClData(**result, tracers=tracers)
 
         # TODO: should probably get rid of saving to npz files
         ## save all cross-spectra
