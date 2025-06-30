@@ -28,7 +28,7 @@ def get_tracer(nside, tracer_config):
         raise ValueError(f"Tracer {key} must have either a 'healpix' or 'catalog' section")
     bins = tracer_config.get("bins", 1)
     bins_one_indexed = tracer_config.get("bins_one_indexed", False)
-    use_mask_squared = tracer_config.get("use_mask_squared", False)
+    use_mask_squared = tracer_config.get("use_mask_squared", False)  # old option
     correct_qu_sign = tracer_config.get("correct_qu_sign", False)
 
     print(name, f"({bins} bins)" if bins > 1 else '')
@@ -49,15 +49,35 @@ def get_tracer(nside, tracer_config):
 
         if tracer_type == "healpix":
             map_file = path.join(data_dir, tracer_config["healpix"]["map"].format(bin=bin_i, nside=nside))
-            mask_file = path.join(data_dir, tracer_config["healpix"]["mask"].format(bin=bin_i, nside=nside))
-            is_masked = tracer_config["healpix"].get("is_masked", False)
-
             maps = np.atleast_2d(hp.read_map(map_file, field=None))
+
             if correct_qu_sign and len(maps) == 2:
                 maps = np.array([-maps[0], maps[1]])
-            mask = hp.read_map(mask_file)
-            if use_mask_squared: mask = mask**2
-            tracer = MapTracer(bin_name, maps, mask, beam=beam, masked_on_input=is_masked)
+            
+            if isinstance(tracer_config["healpix"].get("mask", None), str):
+                # compatibility with old mask specification
+                is_masked = tracer_config["healpix"].get("is_masked", False)
+                mask_file = path.join(data_dir, tracer_config["healpix"]["mask"].format(bin=bin_i, nside=nside))
+                full_mask = hp.read_map(mask_file)
+                if use_mask_squared: full_mask = mask**2
+                if not is_masked:
+                    maps *= full_mask
+            else:
+                # new, more flexible mask specification
+                full_mask = np.ones(maps.shape[1])
+                for key in tracer_config["healpix"].keys():
+                    if not key.startswith("mask"):
+                        continue
+                    mask_options = tracer_config["healpix"][key]
+                    mask_file = path.join(data_dir, mask_options["file"].format(bin=bin_i, nside=nside))
+                    power = mask_options.get("power", 1)
+                    included_in_map = mask_options.get("included_in_map", False)
+                    mask = hp.read_map(mask_file)**power
+                    full_mask *= mask
+                    if not included_in_map:
+                        maps *= mask
+
+            tracer = MapTracer(bin_name, maps, mask, beam=beam, masked_on_input=True)
 
         elif tracer_type == "catalog":
             cat_file = path.join(data_dir, tracer_config["catalog"]["file"].format(bin=bin_i))
